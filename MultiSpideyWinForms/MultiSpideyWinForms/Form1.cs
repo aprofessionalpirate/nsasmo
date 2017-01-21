@@ -303,13 +303,16 @@ namespace MultiSpideyWinForms
             var top = (int)spideyBuffer[4];
             var bottom = (int)spideyBuffer[5];
 
-            var spideyLeft = panel1.Left + ((left / 255) * (spideyRect.Right - spideyRect.Left));
+            var spideyLeft = panel1.Left + ((left / 255.0) * (spideyRect.Right - spideyRect.Left) * 0.8);
+            var spideyRight = panel1.Left + ((right / 255.0) * (spideyRect.Right - spideyRect.Left) * 0.8);
+            var spideyTop = panel1.Top + (spideyRect.Bottom - spideyRect.Top) * 0.12 + ((top / 175.0) * (spideyRect.Bottom - spideyRect.Top) * 0.88);
+            var spideyBottom = panel1.Top + (spideyRect.Bottom - spideyRect.Top) * 0.12 + ((bottom / 175.0) * (spideyRect.Bottom - spideyRect.Top) * 0.88);
 
             button3.BeginInvoke(new Action(() =>
             {
-                button3.Size = new Size(right - left, bottom - top);
-                button3.Left = panel1.Left + ((left / 255) * panel1.Width);
-                button3.Top = panel1.Top - ((top / 255) * panel1.Height);
+                button3.Size = new Size((int)spideyRight - (int)spideyLeft, (int)spideyBottom - (int)spideyTop);
+                button3.Left = (int)spideyLeft;
+                button3.Top = (int)spideyTop;
             }));
 
             string levelTitle = "";

@@ -4,7 +4,10 @@ using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -28,12 +31,15 @@ namespace MultiSpideyWinForms
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern long SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+    
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetParent(IntPtr hWnd);
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLong", CharSet = CharSet.Auto)]
-        private static extern IntPtr GetWindowLong32(HandleRef hWnd, int nIndex);
+        private static extern long GetWindowLong32(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", CharSet = CharSet.Auto)]
-        private static extern IntPtr GetWindowLong64(HandleRef hWnd, int nIndex);
+        private static extern long GetWindowLong64(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowLong")]
         private static extern IntPtr SetWindowLong32(IntPtr hWnd, Int32 nIndex, IntPtr dwNewLong);
@@ -76,6 +82,8 @@ namespace MultiSpideyWinForms
 
         IntPtr spideyWindow = IntPtr.Zero;
         IntPtr dosBoxProcess = IntPtr.Zero;
+        IntPtr originalParent = IntPtr.Zero;
+        long originalWindowLong = 0;
 
         public Form1()
         {
@@ -91,6 +99,18 @@ namespace MultiSpideyWinForms
             */
         }
 
+        public static long GetWindowLong(IntPtr hWnd, int nIndex)
+        {
+            if (IntPtr.Size == 4)
+            {
+                return GetWindowLong32(hWnd, nIndex);
+            }
+            else
+            {
+                return GetWindowLong64(hWnd, nIndex);
+            }
+        }
+
         public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, long dwNewLong)
         {
             if (IntPtr.Size == 4)
@@ -102,15 +122,19 @@ namespace MultiSpideyWinForms
                 return SetWindowLong64(hWnd, nIndex, (IntPtr)dwNewLong);
             }
         }
-        
+
         RECT spideyRect;
-        private void button1_Click(object sender, EventArgs e)
+        private void btnFindSpidey_Click(object sender, EventArgs e)
         {
             spideyWindow = WindowFinder.FindWindowsWithText("SPIDEY").FirstOrDefault();
             if (spideyWindow == null || spideyWindow == IntPtr.Zero) return;
+            btnFindPlayer.Enabled = true;
+            btnFindSpidey.Enabled = false;
 
+            originalParent = GetParent(spideyWindow);
             SetParent(spideyWindow, panel1.Handle);
             // Remove border and whatnot
+            originalWindowLong = GetWindowLong(spideyWindow, GWL_STYLE);
             SetWindowLong(spideyWindow, GWL_STYLE, WS_VISIBLE);
 
             // Move the window to overlay it on this window
@@ -220,9 +244,16 @@ namespace MultiSpideyWinForms
 
         int spideyAddress = 0;
         int levelAddress = 0;
-        System.Threading.Timer memoryTimer;
-        private void button2_Click(object sender, EventArgs e)
+        private void btnFindPlayer_Click(object sender, EventArgs e)
         {
+            if (string.IsNullOrEmpty(txtName.Text))
+            {
+                MessageBox.Show("Please enter a name");
+                return;
+            }
+
+            myName = txtName.Text;
+
             // getting minimum & maximum address
             SYSTEM_INFO sys_info = new SYSTEM_INFO();
             GetSystemInfo(out sys_info);
@@ -284,17 +315,78 @@ namespace MultiSpideyWinForms
 
             if (spideyAddress > 0 && levelAddress > 0)
             {
-                memoryTimer = new System.Threading.Timer(ReadFromMemory, null, 0, 100);
+                if (!string.IsNullOrEmpty(txtIP.Text))
+                {
+                    if (!IPAddress.TryParse(txtIP.Text, out ipAddress))
+                    {
+                        MessageBox.Show("Invalid IP Address");
+                        return;
+                    }
+
+                    try
+                    {
+                        var ep = new IPEndPoint(ipAddress, 6012);
+                        tcpClient = new TcpClient(ep);
+
+                        Task.Factory.StartNew(ClientTask);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(ex.Message);
+                        return;
+                    }
+                    isHosting = false;
+                }
+                else
+                {
+                    try
+                    {
+                        tcpServer = new TcpListener(IPAddress.Any, port);
+                        tcpServer.Start();
+
+                        Task.Factory.StartNew(ServerTask);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(ex.Message);
+                        return;
+                    }
+
+                    playerNumber = 0;
+                    isHosting = true;
+                    btnStart.Enabled = true;
+                }
+                btnFindPlayer.Enabled = false;
+                txtIP.Enabled = false;
+                txtName.Enabled = false;
+            }
+            else
+            {
+                MessageBox.Show("Unable to find player, make sure spidey is in game");
             }
         }
 
-        string previousLevelTitle = "";
+        System.Threading.Timer memoryTimer;
+        int port = 6012;
+        private const byte SEND_NAME = 0x10;
+        private const byte START_GAME = 0x11;
+        bool isHosting = false;
+        TcpListener tcpServer;
+        TcpClient tcpClient;
+        IPAddress ipAddress;
+        private object arrayLock = new object();
+        int playerNumber = 0;
+        byte[] myLocation = new byte[31];
+        string myName = "Player 1";
+        string player2Name = "Player 2";
+        string player3Name = "Player 3";
+        private const string Start = "STARTTHEGAMEALREADY";
+
         private void ReadFromMemory(object state)
         {
-            int bytesRead = 0;  // number of bytes read with ReadProcessMemory
-            byte[] spideyBuffer = new byte[6];
+            int bytesRead = 0;
 
-            // read everything in the buffer above
+            var spideyBuffer = new byte[6];
             ReadProcessMemory((int)dosBoxProcess, spideyAddress, spideyBuffer, 6, ref bytesRead);
             var left = (int)spideyBuffer[0];
             var leftScreen = (int)spideyBuffer[1];
@@ -302,38 +394,45 @@ namespace MultiSpideyWinForms
             var rightScreen = (int)spideyBuffer[3];
             var top = (int)spideyBuffer[4];
             var bottom = (int)spideyBuffer[5];
+            
+            var levelBuffer = new byte[24];
+            ReadProcessMemory((int)dosBoxProcess, levelAddress, levelBuffer, 24, ref bytesRead);
+            
+
+            string levelTitle = "";
+            for (int i = 0; i < 24; i++)
+            {
+                levelTitle += (char)levelBuffer[i];
+            }
 
             var spideyLeft = panel1.Left + ((left / 255.0) * (spideyRect.Right - spideyRect.Left) * 0.8);
             var spideyRight = panel1.Left + ((right / 255.0) * (spideyRect.Right - spideyRect.Left) * 0.8);
             var spideyTop = panel1.Top + (spideyRect.Bottom - spideyRect.Top) * 0.12 + ((top / 175.0) * (spideyRect.Bottom - spideyRect.Top) * 0.88);
             var spideyBottom = panel1.Top + (spideyRect.Bottom - spideyRect.Top) * 0.12 + ((bottom / 175.0) * (spideyRect.Bottom - spideyRect.Top) * 0.88);
-
-            button3.BeginInvoke(new Action(() =>
+            
+            lblPlayer2Loc.BeginInvoke(new Action(() =>
             {
-                button3.Size = new Size((int)spideyRight - (int)spideyLeft, (int)spideyBottom - (int)spideyTop);
-                button3.Left = (int)spideyLeft;
-                button3.Top = (int)spideyTop;
+                lblPlayer2Loc.Text = levelTitle;
             }));
 
-            string levelTitle = "";
-            byte[] buffer = new byte[24];
-
-            // read everything in the buffer above
-            ReadProcessMemory((int)dosBoxProcess, levelAddress, buffer, 24, ref bytesRead);
-            for (int i = 0; i < 24; i++)
+            player2Sprite.BeginInvoke(new Action(() =>
             {
-                //sw.WriteLine("0x{0} : {1}", (mem_basic_info.BaseAddress + i).ToString("X"), (char)buffer[i]);
-                levelTitle += (char)buffer[i];
+                player2Sprite.Size = new Size((int)spideyRight - (int)spideyLeft, (int)spideyBottom - (int)spideyTop);
+                player2Sprite.Left = (int)spideyLeft;
+                player2Sprite.Top = (int)spideyTop;
+            }));
+
+            lock (clientsList)
+            {
+                foreach (var client in clientsList)
+                {
+                    var clientWriter = new StreamWriter(client.GetStream());
+                    clientWriter.WriteLine(Start);
+                    clientWriter.Flush();
+                }
             }
 
-            if (previousLevelTitle == levelTitle)
-                return;
-
-            previousLevelTitle = levelTitle;
-            label1.BeginInvoke(new Action(() =>
-            {
-                label1.Text = levelTitle;
-            }));
+            memoryTimer.Change(100, Timeout.Infinite);
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -341,6 +440,167 @@ namespace MultiSpideyWinForms
             Process process = Process.GetProcessesByName("DOSBox").FirstOrDefault();
             if (process != null)
                 process.Kill();
+            
+            if (tsHost != null)
+                tsHost.Cancel();
+        }
+
+        private void ClientTask()
+        {
+            try
+            {
+                var reader = new StreamReader(tcpClient.GetStream());
+                var writer = new StreamWriter(tcpClient.GetStream());
+                writer.WriteLine(txtName.Text);
+                writer.Flush();
+
+                playerNumber = int.Parse(reader.ReadLine());
+                player2Name = reader.ReadLine();
+
+                var gameStarted = false;
+                while (!gameStarted)
+                {
+                    var line = reader.ReadLine();
+                    if (line == Start)
+                    {
+                        memoryTimer = new System.Threading.Timer(ReadFromMemory, null, 0, Timeout.Infinite);
+                        gameStarted = true;
+                    }
+                    else
+                    {
+                        player3Name = line;
+                    }
+                }
+
+                while (true)
+                {
+                    // wait for signal from timer
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
+
+        volatile bool serverStart = false;
+        int playerCounter = 0;
+        List<TcpClient> clientsList = new List<TcpClient>();
+        private object clientsListLock = new object();
+        private void ServerTask()
+        {
+            try
+            {
+                while (true)
+                {
+                    var client = tcpServer.AcceptTcpClient();
+                    if (serverStart)
+                        break;
+                    Task.Factory.StartNew(() =>
+                    {
+                        try
+                        {
+                            var reader = new StreamReader(client.GetStream());
+                            var writer = new StreamWriter(client.GetStream());
+                            var clientName = reader.ReadLine();
+
+                            Interlocked.Increment(ref playerCounter);
+                            writer.WriteLine(playerCounter.ToString());
+                            writer.WriteLine(myName);
+                            writer.Flush();
+
+                            lock (clientsList)
+                            {
+                                if (clientsList.Count == 0)
+                                {
+                                    player2Name = clientName;
+                                }
+                                else
+                                {
+                                    player3Name = clientName;
+                                    writer.WriteLine(player2Name);
+                                    writer.Flush();
+                                }
+                                foreach (var existingClients in clientsList)
+                                {
+                                    var existingClientWriter = new StreamWriter(existingClients.GetStream());
+                                    existingClientWriter.WriteLine(clientName);
+                                    existingClientWriter.Flush();
+                                }
+                                clientsList.Add(client);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.Message);
+                            lock (clientsList)
+                            {
+                                clientsList.Remove(client);
+                            }
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
+
+        CancellationTokenSource tsHost;
+        private void btnHost_Click(object sender, EventArgs e)
+        {
+            tsHost = new CancellationTokenSource();
+            CancellationToken ct = tsHost.Token;
+            Task.Factory.StartNew(() =>
+            {
+                UdpClient udpServer = new UdpClient(6102);
+
+                while (true)
+                {
+                    var remoteEP = new IPEndPoint(IPAddress.Any, 6102);
+                    var data = udpServer.Receive(ref remoteEP);
+                    if (ct.IsCancellationRequested)
+                        break;
+                    udpServer.Send(new byte[] { 1 }, 1, remoteEP);
+                }
+            }, ct);  
+        }
+
+        private void btnStart_Click(object sender, EventArgs e)
+        {
+            btnStart.Enabled = false;
+            try
+            {
+                lock (clientsList)
+                {
+                    serverStart = true;
+                    foreach (var client in clientsList)
+                    {
+                        var clientWriter = new StreamWriter(client.GetStream());
+                        clientWriter.WriteLine(Start);
+                        clientWriter.Flush();
+                    }
+                }
+                memoryTimer = new System.Threading.Timer(ReadFromMemory, null, 0, Timeout.Infinite);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
+
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            if (originalParent != IntPtr.Zero && spideyWindow != IntPtr.Zero)
+            {
+                SetParent(spideyWindow, originalParent);
+            }
+
+            if (originalWindowLong != 0 && spideyWindow != IntPtr.Zero)
+            {
+                SetWindowLong(spideyWindow, GWL_STYLE, originalWindowLong);
+            }
         }
     }
 }

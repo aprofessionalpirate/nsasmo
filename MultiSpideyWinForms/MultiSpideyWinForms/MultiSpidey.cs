@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -14,13 +12,19 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
+// TTD
+// Find a way to get exact width and height
+
 namespace MultiSpideyWinForms
 {
-    public partial class Form1 : Form
+    public partial class MultiSpidey : Form
     {
         [DllImport("user32.dll")]
         public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-        
+
+        [DllImport("user32.dll")]
+        public static extern bool GetClientRect(IntPtr hwnd, out RECT lpRect);
+
         [DllImport("user32.dll", EntryPoint = "GetWindowThreadProcessId", SetLastError = true,
              CharSet = CharSet.Unicode, ExactSpelling = true,
              CallingConvention = CallingConvention.StdCall)]
@@ -85,19 +89,12 @@ namespace MultiSpideyWinForms
         IntPtr originalParent = IntPtr.Zero;
         long originalWindowLong = 0;
 
-        public Form1()
-        {
-            InitializeComponent();
-            /*
-            spideyWindow = WindowFinder.FindWindowsWithText("SPIDEY").FirstOrDefault();
-            if (spideyWindow == null || spideyWindow == IntPtr.Zero) return;
-            RECT spideyRect;
-            GetWindowRect(spideyWindow, out spideyRect);
-
-            Size = new Size((spideyRect.Right - spideyRect.Left)*2, (spideyRect.Bottom - spideyRect.Top)*2);
-            panel1.Size = new Size((spideyRect.Right - spideyRect.Left) * 2, (spideyRect.Bottom - spideyRect.Top) * 2);
-            */
-        }
+        RECT spideyClientRect;
+        RECT spideyWindowRect;
+        int clientWidth;
+        int clientHeight;
+        int windowWidth;
+        int windowHeight;
 
         public static long GetWindowLong(IntPtr hWnd, int nIndex)
         {
@@ -123,38 +120,68 @@ namespace MultiSpideyWinForms
             }
         }
 
-        RECT spideyRect;
+        public MultiSpidey()
+        {
+            InitializeComponent();
+        }
+
         private void btnFindSpidey_Click(object sender, EventArgs e)
         {
             spideyWindow = WindowFinder.FindWindowsWithText("SPIDEY").FirstOrDefault();
-            if (spideyWindow == null || spideyWindow == IntPtr.Zero) return;
+            if (spideyWindow == null || spideyWindow == IntPtr.Zero)
+            {
+                MessageBox.Show("Spidey not found");
+                return;
+            }
+
             btnFindPlayer.Enabled = true;
             btnFindSpidey.Enabled = false;
 
-            originalParent = GetParent(spideyWindow);
-            SetParent(spideyWindow, panel1.Handle);
-            // Remove border and whatnot
             originalWindowLong = GetWindowLong(spideyWindow, GWL_STYLE);
+            originalParent = GetParent(spideyWindow);
+
+            SetParent(spideyWindow, hostPanel.Handle);
+
+            GetClientRect(spideyWindow, out spideyClientRect);
+            GetWindowRect(spideyWindow, out spideyWindowRect);
+            clientWidth = spideyClientRect.Right - spideyClientRect.Left;
+            clientHeight = spideyClientRect.Bottom - spideyClientRect.Top;
+            windowWidth = spideyWindowRect.Right - spideyWindowRect.Left;
+            windowHeight = spideyWindowRect.Bottom - spideyWindowRect.Top;
+
+            // Have to do this weird thing because height is incorrect on fresh DOSBox
+            SetParent(spideyWindow, originalParent);
+            MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
+            SetParent(spideyWindow, hostPanel.Handle);
+            GetClientRect(spideyWindow, out spideyClientRect);
+            GetWindowRect(spideyWindow, out spideyWindowRect);
+            clientWidth = spideyClientRect.Right - spideyClientRect.Left;
+            clientHeight = spideyClientRect.Bottom - spideyClientRect.Top;
+            windowWidth = spideyWindowRect.Right - spideyWindowRect.Left;
+            windowHeight = spideyWindowRect.Bottom - spideyWindowRect.Top;
+
+            // Make panel big enough for spidey window (won't be exact due to DOSBox weirdness)
+            // Must be done after attaching window otherwise it will have the incorrect size in high DPI displays
+            hostPanel.Size = new Size(clientWidth, clientHeight);
+
+            // Remove border and whatnot
             SetWindowLong(spideyWindow, GWL_STYLE, WS_VISIBLE);
-
             // Move the window to overlay it on this window
-            MoveWindow(spideyWindow, 0, 0, Width, Height, true);
-
-            GetWindowRect(spideyWindow, out spideyRect);
-
-            //Size = new Size((spideyRect.Right - spideyRect.Left) * 2, (spideyRect.Bottom - spideyRect.Top) * 2);
-            panel1.Size = new Size((spideyRect.Right - spideyRect.Left) * 2, (spideyRect.Bottom - spideyRect.Top) * 2);
-
+            MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
         }
-
-        /// <summary>
-        /// Force redraw of control when size changes
-        /// </summary>
-        /// <param name="e">Not used</param>
-        protected override void OnSizeChanged(EventArgs e)
+        
+        protected override void OnMove(EventArgs e)
         {
-            this.Invalidate();
-            base.OnSizeChanged(e);
+            if (spideyWindow != null && spideyWindow != IntPtr.Zero)
+            {
+                var width = spideyWindowRect.Right - spideyWindowRect.Left;
+                var height = spideyWindowRect.Bottom - spideyWindowRect.Top;
+                // Have to do it twice for some reason
+                MoveWindow(spideyWindow, Left, Top, width, height, true);
+                MoveWindow(spideyWindow, 0, 0, width, height, true);
+            }
+            Invalidate();
+            base.OnMove(e);
         }
 
         /// <summary>
@@ -163,19 +190,10 @@ namespace MultiSpideyWinForms
         /// <param name="e"></param>
         protected override void OnHandleDestroyed(EventArgs e)
         {
-            // Stop the application
-            if (spideyWindow != null && spideyWindow != IntPtr.Zero)
-            {
-                // Post a colse message
-                //PostMessage(spideyWindow, WM_CLOSE, 0, 0);
+            DetachSpideyWindow();
 
-                // Delay for it to get the message
-                System.Threading.Thread.Sleep(1000);
-
-                // Clear internal handle
-                spideyWindow = IntPtr.Zero;
-
-            }
+            if (tsHost != null)
+                tsHost.Cancel();
 
             base.OnHandleDestroyed(e);
         }
@@ -188,8 +206,11 @@ namespace MultiSpideyWinForms
         {
             if (spideyWindow != null && spideyWindow != IntPtr.Zero)
             {
-                MoveWindow(spideyWindow, 0, 0, this.Width, this.Height, true);
+                // Have to do it twice for some reason
+                MoveWindow(spideyWindow, Left, Top, windowWidth, windowHeight, true);
+                MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
             }
+            Invalidate();
             base.OnResize(e);
         }
 
@@ -405,10 +426,10 @@ namespace MultiSpideyWinForms
                 levelTitle += (char)levelBuffer[i];
             }
 
-            var spideyLeft = panel1.Left + ((left / 255.0) * (spideyRect.Right - spideyRect.Left) * 0.8);
-            var spideyRight = panel1.Left + ((right / 255.0) * (spideyRect.Right - spideyRect.Left) * 0.8);
-            var spideyTop = panel1.Top + (spideyRect.Bottom - spideyRect.Top) * 0.12 + ((top / 175.0) * (spideyRect.Bottom - spideyRect.Top) * 0.88);
-            var spideyBottom = panel1.Top + (spideyRect.Bottom - spideyRect.Top) * 0.12 + ((bottom / 175.0) * (spideyRect.Bottom - spideyRect.Top) * 0.88);
+            var spideyLeft = hostPanel.Left + ((left / 255.0) * (spideyWindowRect.Right - spideyWindowRect.Left) * 0.8);
+            var spideyRight = hostPanel.Left + ((right / 255.0) * (spideyWindowRect.Right - spideyWindowRect.Left) * 0.8);
+            var spideyTop = hostPanel.Top + (spideyWindowRect.Bottom - spideyWindowRect.Top) * 0.12 + ((top / 175.0) * (spideyWindowRect.Bottom - spideyWindowRect.Top) * 0.88);
+            var spideyBottom = hostPanel.Top + (spideyWindowRect.Bottom - spideyWindowRect.Top) * 0.12 + ((bottom / 175.0) * (spideyWindowRect.Bottom - spideyWindowRect.Top) * 0.88);
             
             lblPlayer2Loc.BeginInvoke(new Action(() =>
             {
@@ -433,16 +454,6 @@ namespace MultiSpideyWinForms
             }
 
             memoryTimer.Change(100, Timeout.Infinite);
-        }
-
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            Process process = Process.GetProcessesByName("DOSBox").FirstOrDefault();
-            if (process != null)
-                process.Kill();
-            
-            if (tsHost != null)
-                tsHost.Cancel();
         }
 
         private void ClientTask()
@@ -500,6 +511,7 @@ namespace MultiSpideyWinForms
                     {
                         try
                         {
+                            // dispose of reader and writer properly
                             var reader = new StreamReader(client.GetStream());
                             var writer = new StreamWriter(client.GetStream());
                             var clientName = reader.ReadLine();
@@ -592,14 +604,21 @@ namespace MultiSpideyWinForms
 
         private void btnReset_Click(object sender, EventArgs e)
         {
-            if (originalParent != IntPtr.Zero && spideyWindow != IntPtr.Zero)
-            {
-                SetParent(spideyWindow, originalParent);
-            }
+            DetachSpideyWindow();
+            btnFindPlayer.Enabled = false;
+            btnFindSpidey.Enabled = true;
+        }
 
+        private void DetachSpideyWindow()
+        {
             if (originalWindowLong != 0 && spideyWindow != IntPtr.Zero)
             {
+                SetParent(spideyWindow, originalParent);
                 SetWindowLong(spideyWindow, GWL_STYLE, originalWindowLong);
+                MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
+                spideyWindow = IntPtr.Zero;
+                originalParent = IntPtr.Zero;
+                originalWindowLong = 0;
             }
         }
     }

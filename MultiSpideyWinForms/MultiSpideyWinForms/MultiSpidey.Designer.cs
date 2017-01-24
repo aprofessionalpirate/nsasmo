@@ -1,6 +1,6 @@
 ﻿namespace MultiSpideyWinForms
 {
-    partial class Form1
+    partial class MultiSpidey
     {
         /// <summary>
         /// Required designer variable.
@@ -28,8 +28,8 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
-            this.panel1 = new System.Windows.Forms.Panel();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MultiSpidey));
+            this.hostPanel = new System.Windows.Forms.Panel();
             this.btnFindSpidey = new System.Windows.Forms.Button();
             this.btnFindPlayer = new System.Windows.Forms.Button();
             this.lblPlayer2Loc = new System.Windows.Forms.Label();
@@ -46,12 +46,13 @@
             ((System.ComponentModel.ISupportInitialize)(this.player2Sprite)).BeginInit();
             this.SuspendLayout();
             // 
-            // panel1
+            // hostPanel
             // 
-            this.panel1.Location = new System.Drawing.Point(127, 127);
-            this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(1459, 848);
-            this.panel1.TabIndex = 0;
+            this.hostPanel.BackColor = System.Drawing.SystemColors.Info;
+            this.hostPanel.Location = new System.Drawing.Point(127, 127);
+            this.hostPanel.Name = "hostPanel";
+            this.hostPanel.Size = new System.Drawing.Size(640, 400);
+            this.hostPanel.TabIndex = 0;
             // 
             // btnFindSpidey
             // 
@@ -87,9 +88,9 @@
             // 
             this.player3Sprite.BackColor = System.Drawing.Color.Transparent;
             this.player3Sprite.Image = ((System.Drawing.Image)(resources.GetObject("player3Sprite.Image")));
-            this.player3Sprite.Location = new System.Drawing.Point(12, 461);
+            this.player3Sprite.Location = new System.Drawing.Point(51, 127);
             this.player3Sprite.Name = "player3Sprite";
-            this.player3Sprite.Size = new System.Drawing.Size(100, 230);
+            this.player3Sprite.Size = new System.Drawing.Size(36, 84);
             this.player3Sprite.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
             this.player3Sprite.TabIndex = 4;
             this.player3Sprite.TabStop = false;
@@ -98,9 +99,9 @@
             // 
             this.player2Sprite.BackColor = System.Drawing.Color.Transparent;
             this.player2Sprite.Image = ((System.Drawing.Image)(resources.GetObject("player2Sprite.Image")));
-            this.player2Sprite.Location = new System.Drawing.Point(12, 212);
+            this.player2Sprite.Location = new System.Drawing.Point(9, 127);
             this.player2Sprite.Name = "player2Sprite";
-            this.player2Sprite.Size = new System.Drawing.Size(100, 230);
+            this.player2Sprite.Size = new System.Drawing.Size(36, 84);
             this.player2Sprite.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
             this.player2Sprite.TabIndex = 5;
             this.player2Sprite.TabStop = false;
@@ -167,11 +168,11 @@
             this.btnReset.UseVisualStyleBackColor = true;
             this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
             // 
-            // Form1
+            // MultiSpidey
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1778, 944);
+            this.ClientSize = new System.Drawing.Size(1065, 769);
             this.Controls.Add(this.btnReset);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.txtName);
@@ -184,11 +185,11 @@
             this.Controls.Add(this.lblPlayer2Loc);
             this.Controls.Add(this.btnFindPlayer);
             this.Controls.Add(this.btnFindSpidey);
-            this.Controls.Add(this.panel1);
-            this.Name = "Form1";
-            this.Text = "Form1";
+            this.Controls.Add(this.hostPanel);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.Name = "MultiSpidey";
+            this.Text = "The Not So Amazing Multiplayer Spiderman";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
-            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
             ((System.ComponentModel.ISupportInitialize)(this.player3Sprite)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.player2Sprite)).EndInit();
             this.ResumeLayout(false);
@@ -198,7 +199,7 @@
 
         #endregion
 
-        private System.Windows.Forms.Panel panel1;
+        private System.Windows.Forms.Panel hostPanel;
         private System.Windows.Forms.Button btnFindSpidey;
         private System.Windows.Forms.Button btnFindPlayer;
         private System.Windows.Forms.Label lblPlayer2Loc;

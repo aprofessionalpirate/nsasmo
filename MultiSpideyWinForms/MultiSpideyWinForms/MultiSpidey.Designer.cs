@@ -42,6 +42,8 @@
             this.label1 = new System.Windows.Forms.Label();
             this.txtName = new System.Windows.Forms.TextBox();
             this.btnReset = new System.Windows.Forms.Button();
+            this.btnHost = new System.Windows.Forms.Button();
+            this.btnJoin = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.player3Sprite)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.player2Sprite)).BeginInit();
             this.SuspendLayout();
@@ -49,7 +51,7 @@
             // hostPanel
             // 
             this.hostPanel.BackColor = System.Drawing.SystemColors.Info;
-            this.hostPanel.Location = new System.Drawing.Point(127, 127);
+            this.hostPanel.Location = new System.Drawing.Point(167, 127);
             this.hostPanel.Name = "hostPanel";
             this.hostPanel.Size = new System.Drawing.Size(640, 400);
             this.hostPanel.TabIndex = 0;
@@ -67,28 +69,28 @@
             // btnFindPlayer
             // 
             this.btnFindPlayer.Enabled = false;
-            this.btnFindPlayer.Location = new System.Drawing.Point(9, 60);
+            this.btnFindPlayer.Location = new System.Drawing.Point(9, 61);
             this.btnFindPlayer.Name = "btnFindPlayer";
             this.btnFindPlayer.Size = new System.Drawing.Size(152, 43);
             this.btnFindPlayer.TabIndex = 1;
-            this.btnFindPlayer.Text = "Get Ready";
+            this.btnFindPlayer.Text = "Find Player";
             this.btnFindPlayer.UseVisualStyleBackColor = true;
             this.btnFindPlayer.Click += new System.EventHandler(this.btnFindPlayer_Click);
             // 
             // lblPlayer2Loc
             // 
             this.lblPlayer2Loc.AutoSize = true;
-            this.lblPlayer2Loc.Location = new System.Drawing.Point(412, 23);
+            this.lblPlayer2Loc.Location = new System.Drawing.Point(177, 23);
             this.lblPlayer2Loc.Name = "lblPlayer2Loc";
-            this.lblPlayer2Loc.Size = new System.Drawing.Size(65, 20);
+            this.lblPlayer2Loc.Size = new System.Drawing.Size(102, 20);
             this.lblPlayer2Loc.TabIndex = 3;
-            this.lblPlayer2Loc.Text = "Player 2";
+            this.lblPlayer2Loc.Text = "Player 2 is at ";
             // 
             // player3Sprite
             // 
             this.player3Sprite.BackColor = System.Drawing.Color.Transparent;
             this.player3Sprite.Image = ((System.Drawing.Image)(resources.GetObject("player3Sprite.Image")));
-            this.player3Sprite.Location = new System.Drawing.Point(51, 127);
+            this.player3Sprite.Location = new System.Drawing.Point(771, 20);
             this.player3Sprite.Name = "player3Sprite";
             this.player3Sprite.Size = new System.Drawing.Size(36, 84);
             this.player3Sprite.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
@@ -99,7 +101,7 @@
             // 
             this.player2Sprite.BackColor = System.Drawing.Color.Transparent;
             this.player2Sprite.Image = ((System.Drawing.Image)(resources.GetObject("player2Sprite.Image")));
-            this.player2Sprite.Location = new System.Drawing.Point(9, 127);
+            this.player2Sprite.Location = new System.Drawing.Point(729, 20);
             this.player2Sprite.Name = "player2Sprite";
             this.player2Sprite.Size = new System.Drawing.Size(36, 84);
             this.player2Sprite.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
@@ -108,33 +110,33 @@
             // 
             // txtIP
             // 
-            this.txtIP.Location = new System.Drawing.Point(167, 35);
+            this.txtIP.Location = new System.Drawing.Point(12, 324);
             this.txtIP.Name = "txtIP";
-            this.txtIP.Size = new System.Drawing.Size(223, 26);
+            this.txtIP.Size = new System.Drawing.Size(149, 26);
             this.txtIP.TabIndex = 8;
             // 
             // lblIP
             // 
             this.lblIP.AutoSize = true;
-            this.lblIP.Location = new System.Drawing.Point(167, 12);
+            this.lblIP.Location = new System.Drawing.Point(8, 301);
             this.lblIP.Name = "lblIP";
-            this.lblIP.Size = new System.Drawing.Size(185, 20);
+            this.lblIP.Size = new System.Drawing.Size(24, 20);
             this.lblIP.TabIndex = 9;
-            this.lblIP.Text = "IP (leave blank if hosting)";
+            this.lblIP.Text = "IP";
             // 
             // lblPlayer3Loc
             // 
             this.lblPlayer3Loc.AutoSize = true;
-            this.lblPlayer3Loc.Location = new System.Drawing.Point(412, 60);
+            this.lblPlayer3Loc.Location = new System.Drawing.Point(177, 72);
             this.lblPlayer3Loc.Name = "lblPlayer3Loc";
-            this.lblPlayer3Loc.Size = new System.Drawing.Size(65, 20);
+            this.lblPlayer3Loc.Size = new System.Drawing.Size(98, 20);
             this.lblPlayer3Loc.TabIndex = 10;
-            this.lblPlayer3Loc.Text = "Player 3";
+            this.lblPlayer3Loc.Text = "Player 3 is at";
             // 
             // btnStart
             // 
             this.btnStart.Enabled = false;
-            this.btnStart.Location = new System.Drawing.Point(550, 12);
+            this.btnStart.Location = new System.Drawing.Point(9, 367);
             this.btnStart.Name = "btnStart";
             this.btnStart.Size = new System.Drawing.Size(152, 43);
             this.btnStart.TabIndex = 11;
@@ -145,7 +147,7 @@
             // label1
             // 
             this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(717, 12);
+            this.label1.Location = new System.Drawing.Point(8, 130);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(51, 20);
             this.label1.TabIndex = 13;
@@ -153,14 +155,15 @@
             // 
             // txtName
             // 
-            this.txtName.Location = new System.Drawing.Point(721, 35);
+            this.txtName.Location = new System.Drawing.Point(9, 153);
             this.txtName.Name = "txtName";
-            this.txtName.Size = new System.Drawing.Size(223, 26);
+            this.txtName.Size = new System.Drawing.Size(152, 26);
             this.txtName.TabIndex = 12;
+            this.txtName.Text = "Spiderman";
             // 
             // btnReset
             // 
-            this.btnReset.Location = new System.Drawing.Point(550, 61);
+            this.btnReset.Location = new System.Drawing.Point(9, 485);
             this.btnReset.Name = "btnReset";
             this.btnReset.Size = new System.Drawing.Size(152, 42);
             this.btnReset.TabIndex = 14;
@@ -168,11 +171,35 @@
             this.btnReset.UseVisualStyleBackColor = true;
             this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
             // 
+            // btnHost
+            // 
+            this.btnHost.Enabled = false;
+            this.btnHost.Location = new System.Drawing.Point(9, 196);
+            this.btnHost.Name = "btnHost";
+            this.btnHost.Size = new System.Drawing.Size(152, 43);
+            this.btnHost.TabIndex = 15;
+            this.btnHost.Text = "Host";
+            this.btnHost.UseVisualStyleBackColor = true;
+            this.btnHost.Click += new System.EventHandler(this.btnHost_Click);
+            // 
+            // btnJoin
+            // 
+            this.btnJoin.Enabled = false;
+            this.btnJoin.Location = new System.Drawing.Point(9, 245);
+            this.btnJoin.Name = "btnJoin";
+            this.btnJoin.Size = new System.Drawing.Size(152, 43);
+            this.btnJoin.TabIndex = 16;
+            this.btnJoin.Text = "Join";
+            this.btnJoin.UseVisualStyleBackColor = true;
+            this.btnJoin.Click += new System.EventHandler(this.btnJoin_Click);
+            // 
             // MultiSpidey
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1065, 769);
+            this.Controls.Add(this.btnJoin);
+            this.Controls.Add(this.btnHost);
             this.Controls.Add(this.btnReset);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.txtName);
@@ -212,6 +239,8 @@
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.TextBox txtName;
         private System.Windows.Forms.Button btnReset;
+        private System.Windows.Forms.Button btnHost;
+        private System.Windows.Forms.Button btnJoin;
     }
 }
 

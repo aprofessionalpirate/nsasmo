@@ -118,6 +118,7 @@ namespace MultiSpideyWinForms
         private IPAddress serverIp;
 
         private int playerNumber = 1;
+        private int players = 1;
         private readonly object infoLock = new object();
         private byte[] player1Info = new byte[30];
         private byte[] player2Info = new byte[30];
@@ -254,21 +255,53 @@ namespace MultiSpideyWinForms
                 levelTitle.Append((char)location[i]);
             }
 
-            lock (infoLock)
+            try
             {
-                if (playerNumber == 1)
+                lock (infoLock)
                 {
-                    player1Info = myInfo;
+                    if (playerNumber == 1)
+                    {
+                        player1Info = myInfo;
+                    }
+                    else if (playerNumber == 2)
+                    {
+                        player2Info = myInfo;
+                        udpClient.Send(player2Info, player2Info.Length);
+                    }
+                    else if (playerNumber == 3)
+                    {
+                        player3Info = myInfo;
+                        udpClient.Send(player3Info, player3Info.Length);
+                    }
+
+                    if (playerNumber >= 2)
+                    {
+                        var ipEndPoint = new IPEndPoint(IPAddress.Any, Port);
+                        var result = udpClient.Receive(ref ipEndPoint);
+                        if (result.Length >= 31)
+                        {
+                            var clientPlayerNumber = (int)result[0];
+
+                            var clientPosition = result.Skip(1).Take(6).ToArray();
+                            var clientLocation = result.Skip(7).Take(24).ToArray();
+                            SetPlayerPosition(clientPlayerNumber, clientPosition, clientLocation);
+                            if (result.Length == 62)
+                            {
+                                clientPlayerNumber = (int)result[31];
+
+                                clientPosition = result.Skip(32).Take(6).ToArray();
+                                clientLocation = result.Skip(38).Take(24).ToArray();
+                                SetPlayerPosition(clientPlayerNumber, clientPosition, clientLocation);
+                            }
+                        }
+                    }
+
+                    MyLocation = levelTitle.ToString();
                 }
-                else if (playerNumber == 2)
-                {
-                    player2Info = myInfo;
-                }
-                else if (playerNumber == 3)
-                {
-                    player3Info = myInfo;
-                }
-                MyLocation = levelTitle.ToString();
+            }
+            catch (Exception ex)
+            {
+
             }
 
             var playerLabel = lblPlayer1Loc;
@@ -385,11 +418,13 @@ namespace MultiSpideyWinForms
 
                     if (playerCounter == 2)
                     {
+                        players = 2;
                         player2Name = clientName;
                         Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; }));
                     }
                     else if (playerCounter == 3)
                     {
+                        players = 3;
                         player3Name = clientName;
                         Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; }));
                     }
@@ -454,7 +489,9 @@ namespace MultiSpideyWinForms
 
             var serverStartedSignal = new Progress<bool>(s =>
             {
-                Task.Run(UdpClientTask);
+                udpClient = new UdpClient();
+                udpClient.Client.ReceiveTimeout = 5000;
+                udpClient.Connect(serverIp, Port);
                 memoryTimer = new Timer(ReadFromMemory, null, 0, Timeout.Infinite);
             }) as IProgress<bool>;
 
@@ -570,39 +607,46 @@ namespace MultiSpideyWinForms
                     player2Info = result.Buffer;
                 else
                     player3Info = result.Buffer;
-            }
-        }
 
-        private async Task UdpClientTask()
-        {
-            udpClient = new UdpClient();
-            udpClient.Connect(serverIp, Port);
-            while (serverStarted)
-            {
-                await Task.Delay(100);
                 lock (infoLock)
                 {
-                    if (playerNumber == 2)
+                    if (players == 2)
                     {
-                        udpClient.Send(player2Info, player2Info.Length);
+                        udpClient.Send(player1Info, player1Info.Length, result.RemoteEndPoint);
                     }
-                    else if (playerNumber == 3)
+                    else if (players == 3)
                     {
-                        udpClient.Send(player3Info, player3Info.Length);
+                        var infoToSend = new byte[62];
+                        Buffer.BlockCopy(player1Info, 0, infoToSend, 0, player1Info.Length);
+
+                        if (clientPlayerNumber == 2)
+                            Buffer.BlockCopy(player3Info, 0, infoToSend, player1Info.Length, player3Info.Length);
+                        else
+                            Buffer.BlockCopy(player2Info, 0, infoToSend, player1Info.Length, player2Info.Length);
+
+                        udpClient.Send(infoToSend, infoToSend.Length, result.RemoteEndPoint);
                     }
                 }
             }
         }
 
-        private void SetPlayerPosition(int playerNumber, byte[] position, byte[] location)
+        private void SetPlayerPosition(int clientPlayerNumber, byte[] position, byte[] location)
         {
             var playerBox = player2Sprite;
-            var playerLabel = lblPlayer2Loc;
+            var playerLabel = lblPlayer1Loc;
+            
+            if (clientPlayerNumber == 2)
+            {
+                playerLabel = lblPlayer2Loc;
+            }
+            else if (clientPlayerNumber == 3)
+            {
+                playerLabel = lblPlayer3Loc;
+            }
 
-            if (playerNumber == 3)
+            if ((clientPlayerNumber == 3) || (clientPlayerNumber == 2 && playerNumber == 3))
             {
                 playerBox = player3Sprite;
-                playerLabel = lblPlayer3Loc;
             }
 
             var left = (int)position[0];

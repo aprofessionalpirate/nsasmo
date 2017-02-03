@@ -8,18 +8,15 @@ namespace MultiSpideyWinForms
 {
     public static class MemoryScanner
     {
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
         [DllImport("kernel32.dll")]
         private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
 
         [DllImport("kernel32.dll")]
         private static extern bool ReadProcessMemory(int hProcess, int lpBaseAddress, byte[] lpBuffer, int dwSize, ref int lpNumberOfBytesRead);
-
-        //[DllImport("kernel32.dll")]
-        //private static extern void GetSystemInfo(out SYSTEM_INFO lpSystemInfo);
-
-        //[DllImport("kernel32.dll")]
-        //private static extern void GetNativeSystemInfo(out SYSTEM_INFO lpSystemInfo);
-
+        
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
 
@@ -141,48 +138,31 @@ namespace MultiSpideyWinForms
             MEM_PRIVATE = 0x20000
         }
 
-        /*
-        public struct SYSTEM_INFO
-        {
-            public ushort processorArchitecture;
-            ushort reserved;
-            public uint pageSize;
-            public IntPtr minimumApplicationAddress;
-            public IntPtr maximumApplicationAddress;
-            public IntPtr activeProcessorMask;
-            public uint numberOfProcessors;
-            public uint processorType;
-            public uint allocationGranularity;
-            public ushort processorLevel;
-            public ushort processorRevision;
-        }*/
-
         private static IntPtr dosBoxProcess = IntPtr.Zero;
 
         private static int spideyAddress;
         private static int levelAddress;
 
-        public static bool GetMemoryAddresses(Form form)
+        public static bool GetMemoryAddresses(Form form, IntPtr window)
         {
-            var process = Process.GetProcessesByName("DOSBox")[0];
+            uint processId;
+            GetWindowThreadProcessId(window, out processId);
+            var process = Process.GetProcessById((int)processId);
+
+            if (process == null)
+                return false;
 
             // Getting minimum & maximum address
-            //var sys_info = new SYSTEM_INFO();
             if ((Is64BitProcess || IsProcessWow64(Process.GetCurrentProcess())) && !IsProcessWow64(process))
             {
                 form.Invoke(new Action(() => { MessageBox.Show("DOSBox process is 64-bit, please use 32-bit DOSBox"); }));
                 return false;
             }
-
-            //GetSystemInfo(out sys_info);
-
-            //var proc_min_address = sys_info.minimumApplicationAddress;
-            //var proc_max_address = sys_info.maximumApplicationAddress;
+            
             IntPtr proc_min_address = IntPtr.Zero;
 
             // saving the values as long ints so I won't have to do a lot of casts later
             long proc_min_address_l = (long)proc_min_address;
-            //long proc_max_address_l = (long)proc_max_address;
             long proc_max_address_l = 0x7fffffff;
 
             // opening the process with desired access level
@@ -300,22 +280,16 @@ namespace MultiSpideyWinForms
             return spideyBuffer;
         }
 
-        public static string ReadLevelTitle()
+        public static byte[] ReadLevelTitle()
         {
-            var levelTitle = new StringBuilder();
-
+            var levelBuffer = new byte[24];
             if (levelAddress != 0)
             {
                 int bytesRead = 0;
-                var levelBuffer = new byte[24];
                 ReadProcessMemory((int)dosBoxProcess, levelAddress, levelBuffer, 24, ref bytesRead);
-                for (int i = 0; i < 24; i++)
-                {
-                    levelTitle.Append((char)levelBuffer[i]);
-                }
             }
 
-            return levelTitle.ToString();
+            return levelBuffer;
         }
     }
 }

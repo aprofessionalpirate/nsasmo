@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -20,22 +21,6 @@ namespace MultiSpideyWinForms
 {
     public partial class MultiSpidey : Form
     {
-        /*
-        [DllImport("user32.dll", EntryPoint = "GetWindowThreadProcessId", SetLastError = true,
-             CharSet = CharSet.Unicode, ExactSpelling = true,
-             CallingConvention = CallingConvention.StdCall)]
-        private static extern long GetWindowThreadProcessId(long hWnd, long lpdwProcessId);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern long SetWindowPos(IntPtr hwnd, long hWndInsertAfter, long x, long y, long cx, long cy, long wFlags);
-
-        [DllImport("user32.dll", EntryPoint = "PostMessageA", SetLastError = true)]
-        private static extern bool PostMessage(IntPtr hwnd, uint Msg, long wParam, long lParam);
-        */
-
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
@@ -132,10 +117,16 @@ namespace MultiSpideyWinForms
         private volatile bool serverStarted = false;
         private IPAddress serverIp;
 
-        private byte[] myLocation = new byte[31];
-        private string myName = "Player 1";
+        private int playerNumber = 1;
+        private readonly object infoLock = new object();
+        private byte[] player1Info = new byte[30];
+        private byte[] player2Info = new byte[30];
+        private byte[] player3Info = new byte[30];
+        private string player1Name = "Player 1";
         private string player2Name = "Player 2";
         private string player3Name = "Player 3";
+        private string MyLocation = "";
+
         private const string Start = "STARTTHEGAMEALREADY";
 
         public MultiSpidey()
@@ -230,13 +221,12 @@ namespace MultiSpideyWinForms
 
             Task.Run(() =>
             {
-                if (!MemoryScanner.GetMemoryAddresses(this))
+                if (!MemoryScanner.GetMemoryAddresses(this, spideyWindow))
                 {
                     Invoke(new Action(() => { MessageBox.Show("Unable to find player, make sure spidey is in game"); }));
                     success.Report(false);
                     return;
                 }
-                memoryTimer = new Timer(ReadFromMemory, null, 0, Timeout.Infinite);
                 success.Report(true);
             });
         }
@@ -249,32 +239,51 @@ namespace MultiSpideyWinForms
                 return;
             }
 
-            // Move this logic into class
+            var myInfo = new byte[31];
+            myInfo[0] = (byte)playerNumber;
             var spideyBuffer = MemoryScanner.ReadSpideyPosition();
-            var left = (int)spideyBuffer[0];
-            var leftScreen = (int)spideyBuffer[1];
-            var right = (int)spideyBuffer[2];
-            var rightScreen = (int)spideyBuffer[3];
-            var top = (int)spideyBuffer[4];
-            var bottom = (int)spideyBuffer[5];
+            var location = MemoryScanner.ReadLevelTitle();
+
+            Buffer.BlockCopy(spideyBuffer, 0, myInfo, 1, spideyBuffer.Length);
+            Buffer.BlockCopy(location, 0, myInfo, spideyBuffer.Length + 1, location.Length);
             
-            var spideyLeft = hostPanel.Left + ((left / 255.0) * clientWidth * 0.8);
-            var spideyRight = hostPanel.Left + ((right / 255.0) * clientWidth * 0.8);
-            var spideyTop = hostPanel.Top + clientHeight * 0.12 + ((top / 175.0) * clientHeight * 0.88);
-            var spideyBottom = hostPanel.Top + clientHeight * 0.12 + ((bottom / 175.0) * clientHeight * 0.88);
+            var levelTitle = new StringBuilder();
 
-            player2Sprite.BeginInvoke(new Action(() =>
+            for (int i = 0; i < 24; i++)
             {
-                player2Sprite.Size = new Size((int)spideyRight - (int)spideyLeft, (int)spideyBottom - (int)spideyTop);
-                player2Sprite.Left = (int)spideyLeft;
-                player2Sprite.Top = (int)spideyTop;
-            }));
+                levelTitle.Append((char)location[i]);
+            }
 
-            var levelTitle = MemoryScanner.ReadLevelTitle();
-
-            lblPlayer2Loc.BeginInvoke(new Action(() =>
+            lock (infoLock)
             {
-                lblPlayer2Loc.Text = levelTitle;
+                if (playerNumber == 1)
+                {
+                    player1Info = myInfo;
+                }
+                else if (playerNumber == 2)
+                {
+                    player2Info = myInfo;
+                }
+                else if (playerNumber == 3)
+                {
+                    player3Info = myInfo;
+                }
+                MyLocation = levelTitle.ToString();
+            }
+
+            var playerLabel = lblPlayer1Loc;
+            if (playerNumber == 2)
+            {
+                playerLabel = lblPlayer2Loc;
+            }
+            else if (playerNumber == 3)
+            {
+                playerLabel = lblPlayer3Loc;
+            }
+
+            playerLabel.BeginInvoke(new Action(() =>
+            {
+                playerLabel.Text = levelTitle.ToString();
             }));
 
             memoryTimer.Change(100, Timeout.Infinite);
@@ -305,6 +314,10 @@ namespace MultiSpideyWinForms
             if (!GetName())
                 return;
 
+            playerNumber = 1;
+            player1Name = txtName.Text;
+            lblPlayer1Name.ForeColor = Color.Red;
+            lblPlayer1Name.Text = player1Name;
             btnHost.Enabled = false;
             btnJoin.Enabled = false;
             txtIP.Enabled = false;
@@ -330,8 +343,6 @@ namespace MultiSpideyWinForms
                 
                 cancellation.Cancel();
                 await connectionTask;
-                
-                Invoke(new Action(() => { MessageBox.Show("Server stopped"); }));
             }
             catch (Exception ex)
             {
@@ -342,15 +353,15 @@ namespace MultiSpideyWinForms
         private async Task HandleNewConnections(IProgress<bool> canStart, CancellationTokenSource cancellation)
         {
             var tcpServer = new TcpListener(IPAddress.Any, Port);
-            var tcpClients = new List<TcpClient>();
+            var tcpClients = new List<TcpClientWithName>();
 
             try
             {
                 tcpServer.Start();
-                var playerCounter = 0;
+                var playerCounter = 1;
                 while (!cancellation.IsCancellationRequested)
                 {
-                    var client = await Task.Run(() => tcpServer.AcceptTcpClientAsync(), cancellation.Token);
+                    var client = await tcpServer.AcceptTcpClientAsync().WithWaitCancellation(cancellation.Token);
                     if (cancellation.IsCancellationRequested)
                         break;
                     if (client == null)
@@ -359,21 +370,48 @@ namespace MultiSpideyWinForms
                     canStart.Report(true);
                     playerCounter++;
 
-                    using (var reader = new StreamReader(client.GetStream()))
-                    {
-                        using (var writer = new StreamWriter(client.GetStream()))
-                        {
-                            var clientName = reader.ReadLine();
-                            writer.WriteLine(playerCounter.ToString());
-                            writer.WriteLine(myName);
-                            writer.Flush();
+                    var clientWithName = new TcpClientWithName();
 
-                            Invoke(new Action(() => { MessageBox.Show(clientName); }));
-                        }
+                    var reader = new StreamReader(client.GetStream());
+                    var writer = new StreamWriter(client.GetStream());
+
+                    clientWithName.Client = client;
+                    clientWithName.Reader = reader;
+                    clientWithName.Writer = writer;
+
+                    var clientName = reader.ReadLine();
+                    clientWithName.PlayerNumber = playerCounter;
+                    clientWithName.Name = clientName;
+
+                    if (playerCounter == 2)
+                    {
+                        player2Name = clientName;
+                        Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; }));
+                    }
+                    else if (playerCounter == 3)
+                    {
+                        player3Name = clientName;
+                        Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; }));
                     }
 
-                    tcpClients.Add(client);
+                    writer.WriteLine(playerCounter.ToString());
+                    writer.WriteLine(player1Name);
+
+                    foreach (var tcpClient in tcpClients)
+                    {
+                        writer.WriteLine(tcpClient.PlayerNumber);
+                        writer.WriteLine(tcpClient.Name);
+                        tcpClient.Writer.WriteLine(playerCounter);
+                        tcpClient.Writer.WriteLine(clientName);
+                        tcpClient.Writer.Flush();
+                    }
+                    writer.Flush();
+
+                    tcpClients.Add(clientWithName);
                 }
+            }
+            catch (OperationCanceledException)
+            {
             }
             catch (Exception ex)
             {
@@ -385,12 +423,15 @@ namespace MultiSpideyWinForms
                 {
                     foreach (var tcpClient in tcpClients)
                     {
-                        using (var writer = new StreamWriter(tcpClient.GetStream()))
-                        {
-                            writer.WriteLine(Start);
-                            writer.Flush();
-                        }
+                        tcpClient.Writer.WriteLine(Start);
+                        tcpClient.Writer.Flush();
                     }
+                }
+                foreach (var tcpClient in tcpClients)
+                {
+                    tcpClient.Reader.Close();
+                    tcpClient.Writer.Close();
+                    tcpClient.Client.Close();
                 }
                 tcpServer.Stop();
             }
@@ -409,14 +450,18 @@ namespace MultiSpideyWinForms
             txtIP.Enabled = false;
             txtName.Enabled = false;
 
+            var myName = txtName.Text;
+
             var serverStartedSignal = new Progress<bool>(s =>
             {
+                Task.Run(UdpClientTask);
+                memoryTimer = new Timer(ReadFromMemory, null, 0, Timeout.Infinite);
             }) as IProgress<bool>;
 
-            Task.Run(() => ClientTask());
+            Task.Run(() => ClientTask(myName, serverStartedSignal));
         }
 
-        private async Task ClientTask()
+        private async Task ClientTask(string myName, IProgress<bool> serverStartedSignal)
         {
             var tcpClient = new TcpClient();
             try
@@ -428,13 +473,37 @@ namespace MultiSpideyWinForms
                     {
                         writer.WriteLine(myName);
                         writer.Flush();
-                        var playerNumber = int.Parse(reader.ReadLine());
-                        var serverName = reader.ReadLine();
+                        playerNumber = int.Parse(reader.ReadLine());
+                        player1Name = reader.ReadLine();
+                        Invoke(new Action(() => { lblPlayer1Name.Text = player1Name; }));
 
-                        var nextInstruction = await reader.ReadLineAsync();
-
-                        if (nextInstruction == Start)
-                            Invoke(new Action(() => { MessageBox.Show("Server started"); }));
+                        if (playerNumber == 2)
+                        {
+                            player2Name = myName;
+                            Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; lblPlayer2Name.ForeColor = Color.Red; }));
+                        }
+                        else if (playerNumber == 3)
+                        {
+                            player3Name = myName;
+                            Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; lblPlayer3Name.ForeColor = Color.Red; }));
+                        }
+                        
+                        while (!serverStarted)
+                        {
+                            var nextInstruction = await reader.ReadLineAsync();
+                            if (nextInstruction == Start)
+                                serverStarted = true;
+                            else if (nextInstruction == "2")
+                            {
+                                player2Name = reader.ReadLine();
+                                Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; }));
+                            }
+                            else if (nextInstruction == "3")
+                            {
+                                player3Name = reader.ReadLine();
+                                Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; }));
+                            }
+                        }
                     }
                 }
             }
@@ -445,6 +514,8 @@ namespace MultiSpideyWinForms
             finally
             {
                 tcpClient.Close();
+                if (serverStarted)
+                    serverStartedSignal.Report(true);
             }
         }
 
@@ -455,7 +526,6 @@ namespace MultiSpideyWinForms
                 MessageBox.Show("Please enter a name");
                 return false;
             }
-            myName = txtName.Text;
             return true;
         }
 
@@ -472,11 +542,116 @@ namespace MultiSpideyWinForms
         private void btnStart_Click(object sender, EventArgs e)
         {
             serverStarted = true;
-            signalToStartHosting.Release();
-            
             udpClient = new UdpClient(new IPEndPoint(IPAddress.Any, Port));
+            signalToStartHosting.Release();
+
+            Task.Run(UdpServerTask);
 
             btnStart.Enabled = false;
+            memoryTimer = new Timer(ReadFromMemory, null, 0, Timeout.Infinite);
+        }
+
+        private async Task UdpServerTask()
+        {
+            while (serverStarted)
+            {
+                var result = await udpClient.ReceiveAsync();
+                if (result.Buffer.Length < 31)
+                    continue;
+
+                var clientPlayerNumber = (int)result.Buffer[0];
+
+                var position = result.Buffer.Skip(1).Take(6).ToArray();
+                var location = result.Buffer.Skip(7).Take(24).ToArray();
+
+                SetPlayerPosition(clientPlayerNumber, position, location);
+                
+                if (clientPlayerNumber == 2)
+                    player2Info = result.Buffer;
+                else
+                    player3Info = result.Buffer;
+            }
+        }
+
+        private async Task UdpClientTask()
+        {
+            udpClient = new UdpClient();
+            udpClient.Connect(serverIp, Port);
+            while (serverStarted)
+            {
+                await Task.Delay(100);
+                lock (infoLock)
+                {
+                    if (playerNumber == 2)
+                    {
+                        udpClient.Send(player2Info, player2Info.Length);
+                    }
+                    else if (playerNumber == 3)
+                    {
+                        udpClient.Send(player3Info, player3Info.Length);
+                    }
+                }
+            }
+        }
+
+        private void SetPlayerPosition(int playerNumber, byte[] position, byte[] location)
+        {
+            var playerBox = player2Sprite;
+            var playerLabel = lblPlayer2Loc;
+
+            if (playerNumber == 3)
+            {
+                playerBox = player3Sprite;
+                playerLabel = lblPlayer3Loc;
+            }
+
+            var left = (int)position[0];
+            var leftScreen = (int)position[1];
+            var right = (int)position[2];
+            var rightScreen = (int)position[3];
+            var top = (int)position[4];
+            var bottom = (int)position[5];
+
+            var spideyLeft = hostPanel.Left + ((left / 255.0) * clientWidth * 0.8);
+            var spideyRight = hostPanel.Left + ((right / 255.0) * clientWidth * 0.8);
+            var spideyTop = hostPanel.Top + clientHeight * 0.12 + ((top / 175.0) * clientHeight * 0.88);
+            var spideyBottom = hostPanel.Top + clientHeight * 0.12 + ((bottom / 175.0) * clientHeight * 0.88);
+            
+            var levelTitle = new StringBuilder();
+
+            for (int i = 0; i < 24; i++)
+            {
+                levelTitle.Append((char)location[i]);
+            }
+
+            var sameLocation = false;
+            lock (infoLock)
+            {
+                sameLocation = MyLocation == levelTitle.ToString();
+            }
+
+            if (sameLocation)
+            {
+                playerBox.BeginInvoke(new Action(() =>
+                {
+                    playerBox.Visible = true;
+                    playerBox.Size = new Size((int)spideyRight - (int)spideyLeft, (int)spideyBottom - (int)spideyTop);
+                    playerBox.Left = (int)spideyLeft;
+                    playerBox.Top = (int)spideyTop;
+                }));
+            }
+            else
+            {
+                playerBox.BeginInvoke(new Action(() =>
+                {
+                    playerBox.Visible = false;
+                }));
+            }
+
+            playerLabel.BeginInvoke(new Action(() =>
+            {
+                playerLabel.Text = levelTitle.ToString();
+            }));
         }
 
         /*

@@ -91,6 +91,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AsyncExt.cs" />
+    <Compile Include="ConnectionManager.cs" />
     <Compile Include="MemoryScanner.cs" />
     <Compile Include="MultiSpidey.cs">
       <SubType>Form</SubType>
@@ -100,8 +101,10 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SpideyWindow.cs" />
     <Compile Include="TcpClientWithName.cs" />
     <Compile Include="WindowFinder.cs" />
+    <Compile Include="WindowManager.cs" />
     <EmbeddedResource Include="MultiSpidey.resx">
       <DependentUpon>MultiSpidey.cs</DependentUpon>
     </EmbeddedResource>

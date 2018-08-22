@@ -145,8 +145,7 @@ namespace MultiSpideyWinForms
 
         public static bool GetMemoryAddresses(Form form, IntPtr window)
         {
-            uint processId;
-            GetWindowThreadProcessId(window, out processId);
+            GetWindowThreadProcessId(window, out uint processId);
             var process = Process.GetProcessById((int)processId);
 
             if (process == null)

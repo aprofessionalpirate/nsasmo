@@ -1,12 +1,10 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,100 +12,18 @@ using System.Windows.Forms;
 using Timer = System.Threading.Timer;
 
 // TTD
+// Rewrite this class to properly do UDP connections
 // Fix workaround for getting width/height
 // Use SetWindowPos instead of MoveWindow
+// Interpolation of player position
 
 namespace MultiSpideyWinForms
 {
     public partial class MultiSpidey : Form
     {
-        [DllImport("user32.dll")]
-        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-        [DllImport("user32.dll")]
-        private static extern bool GetClientRect(IntPtr hwnd, out RECT lpRect);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern long SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
-    
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll", EntryPoint = "GetWindowLong", CharSet = CharSet.Auto)]
-        private static extern long GetWindowLong32(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", CharSet = CharSet.Auto)]
-        private static extern long GetWindowLong64(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowLong")]
-        private static extern IntPtr SetWindowLong32(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-        [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowLongPtr")]
-        private static extern IntPtr SetWindowLong64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool MoveWindow(IntPtr hwnd, int x, int y, int cx, int cy, bool repaint);
-
-        private const int SWP_NOOWNERZORDER = 0x200;
-        private const int SWP_NOREDRAW = 0x8;
-        private const int SWP_NOZORDER = 0x4;
-        private const int SWP_SHOWWINDOW = 0x0040;
-        private const int WS_EX_MDICHILD = 0x40;
-        private const int SWP_FRAMECHANGED = 0x20;
-        private const int SWP_NOACTIVATE = 0x10;
-        private const int SWP_ASYNCWINDOWPOS = 0x4000;
-        private const int SWP_NOMOVE = 0x2;
-        private const int SWP_NOSIZE = 0x1;
-        private const int GWL_STYLE = (-16);
-        private const int WS_VISIBLE = 0x10000000;
-        private const int WM_CLOSE = 0x10;
-        private const int WS_CHILD = 0x40000000;
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        public static long GetWindowLong(IntPtr hWnd, int nIndex)
-        {
-            if (!MemoryScanner.Is64BitProcess)
-            {
-                return GetWindowLong32(hWnd, nIndex);
-            }
-            else
-            {
-                return GetWindowLong64(hWnd, nIndex);
-            }
-        }
-
-        public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, long dwNewLong)
-        {
-            if (!MemoryScanner.Is64BitProcess)
-            {
-                return SetWindowLong32(hWnd, nIndex, (IntPtr)dwNewLong);
-            }
-            else
-            {
-                return SetWindowLong64(hWnd, nIndex, (IntPtr)dwNewLong);
-            }
-        }
-
         private const int Port = 6015;
 
-        private IntPtr spideyWindow = IntPtr.Zero;
-        private IntPtr originalParent = IntPtr.Zero;
-        private long originalWindowLong = 0;
-
-        private RECT spideyClientRect;
-        private RECT spideyWindowRect;
-        private int clientWidth;
-        private int clientHeight;
-        private int windowWidth;
-        private int windowHeight;
+        private SpideyWindow spideyWindow;
 
         private volatile bool _requestTimerStop = false;
         private Timer memoryTimer;
@@ -137,66 +53,31 @@ namespace MultiSpideyWinForms
 
         private void btnFindSpidey_Click(object sender, EventArgs e)
         {
-            spideyWindow = WindowFinder.FindWindowsWithText("SPIDEY").FirstOrDefault();
-            if (spideyWindow == null || spideyWindow == IntPtr.Zero)
+            if (WindowManager.AttachSpideyWindow(hostPanel.Handle, out SpideyWindow spideyWindow))
             {
-                MessageBox.Show("Spidey not found");
-                return;
+                btnFindPlayer.Enabled = true;
+                btnFindSpidey.Enabled = false;
+
+                // Make panel big enough for spidey window
+                // Must be done after attaching window otherwise it will have the incorrect size in high DPI displays
+                hostPanel.Size = new Size(spideyWindow.BorderlessWidth, spideyWindow.BorderlessHeight);
             }
-
-            btnFindPlayer.Enabled = true;
-            btnFindSpidey.Enabled = false;
-
-            originalWindowLong = GetWindowLong(spideyWindow, GWL_STYLE);
-            originalParent = GetParent(spideyWindow);
-
-            SetParent(spideyWindow, hostPanel.Handle);
-            
-            // Have to do this weird thing because height is incorrect on fresh DOSBox
-            GetWindowRect(spideyWindow, out spideyWindowRect);
-            var firstWindowWidth = spideyWindowRect.Right - spideyWindowRect.Left;
-            var firstWindowHeight = spideyWindowRect.Bottom - spideyWindowRect.Top;
-            SetParent(spideyWindow, originalParent);
-            MoveWindow(spideyWindow, 0, 0, firstWindowWidth, firstWindowHeight, true);
-            SetParent(spideyWindow, hostPanel.Handle);
-            GetClientRect(spideyWindow, out spideyClientRect);
-            GetWindowRect(spideyWindow, out spideyWindowRect);
-            clientWidth = spideyClientRect.Right - spideyClientRect.Left;
-            clientHeight = spideyClientRect.Bottom - spideyClientRect.Top;
-            windowWidth = spideyWindowRect.Right - spideyWindowRect.Left;
-            windowHeight = spideyWindowRect.Bottom - spideyWindowRect.Top;
-
-            // Make panel big enough for spidey window
-            // Must be done after attaching window otherwise it will have the incorrect size in high DPI displays
-            hostPanel.Size = new Size(clientWidth, clientHeight);
-
-            // Remove border and whatnot
-            SetWindowLong(spideyWindow, GWL_STYLE, WS_VISIBLE);
-
-            // Move the window to overlay it on this window
-            MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
+            else
+            {
+                MessageBox.Show("Unable to attach spidey window");
+            }
         }
         
         protected override void OnMove(EventArgs e)
         {
-            if (spideyWindow != null && spideyWindow != IntPtr.Zero)
-            {
-                // Have move it off 0, 0 first otherwise it won't update
-                MoveWindow(spideyWindow, 1, 1, windowWidth, windowHeight, true);
-                MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
-            }
+            WindowManager.UpdateSpideyWindow(spideyWindow);
             Invalidate();
             base.OnMove(e);
         }
 
         protected override void OnResize(EventArgs e)
         {
-            if (spideyWindow != null && spideyWindow != IntPtr.Zero)
-            {
-                // Have move it off 0, 0 first otherwise it won't update
-                MoveWindow(spideyWindow, 1, 1, windowWidth, windowHeight, true);
-                MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
-            }
+            WindowManager.UpdateSpideyWindow(spideyWindow);
             Invalidate();
             base.OnResize(e);
         }
@@ -204,11 +85,25 @@ namespace MultiSpideyWinForms
         protected override void OnHandleDestroyed(EventArgs e)
         {
             _requestTimerStop = true;
-            DetachSpideyWindow();
+            if (WindowManager.DetachSpideyWindow(spideyWindow))
+            {
+                spideyWindow = null;
+            }
 
             base.OnHandleDestroyed(e);
         }
 
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            if (WindowManager.DetachSpideyWindow(spideyWindow))
+            {
+                spideyWindow = null;
+            }
+            btnFindPlayer.Enabled = false;
+            btnFindSpidey.Enabled = true;
+        }
+
+        // TODO - should just do this on startup
         private void btnFindPlayer_Click(object sender, EventArgs e)
         {
             btnFindPlayer.Enabled = false;
@@ -222,7 +117,7 @@ namespace MultiSpideyWinForms
 
             Task.Run(() =>
             {
-                if (!MemoryScanner.GetMemoryAddresses(this, spideyWindow))
+                if (!MemoryScanner.GetMemoryAddresses(this, spideyWindow.Handle))
                 {
                     Invoke(new Action(() => { MessageBox.Show("Unable to find player, make sure spidey is in game"); }));
                     success.Report(false);
@@ -230,6 +125,28 @@ namespace MultiSpideyWinForms
                 }
                 success.Report(true);
             });
+        }
+
+        private void btnHost_Click(object sender, EventArgs e)
+        {
+            if (!GetName())
+                return;
+
+            playerNumber = 1;
+            player1Name = txtName.Text;
+            lblPlayer1Name.ForeColor = Color.Red;
+            lblPlayer1Name.Text = player1Name;
+            btnHost.Enabled = false;
+            btnJoin.Enabled = false;
+            txtIP.Enabled = false;
+            txtName.Enabled = false;
+
+            var canStart = new Progress<bool>(s =>
+            {
+                btnStart.Enabled = true;
+            }) as IProgress<bool>;
+
+            Task.Run(() => ServerTask(canStart));
         }
 
         private void ReadFromMemory(object state)
@@ -320,48 +237,6 @@ namespace MultiSpideyWinForms
             }));
 
             memoryTimer.Change(100, Timeout.Infinite);
-        }
-
-        private void btnReset_Click(object sender, EventArgs e)
-        {
-            DetachSpideyWindow();
-            btnFindPlayer.Enabled = false;
-            btnFindSpidey.Enabled = true;
-        }
-
-        private void DetachSpideyWindow()
-        {
-            if (originalWindowLong != 0 && spideyWindow != IntPtr.Zero)
-            {
-                SetParent(spideyWindow, originalParent);
-                SetWindowLong(spideyWindow, GWL_STYLE, originalWindowLong);
-                MoveWindow(spideyWindow, 0, 0, windowWidth, windowHeight, true);
-                spideyWindow = IntPtr.Zero;
-                originalParent = IntPtr.Zero;
-                originalWindowLong = 0;
-            }
-        }
-
-        private void btnHost_Click(object sender, EventArgs e)
-        {
-            if (!GetName())
-                return;
-
-            playerNumber = 1;
-            player1Name = txtName.Text;
-            lblPlayer1Name.ForeColor = Color.Red;
-            lblPlayer1Name.Text = player1Name;
-            btnHost.Enabled = false;
-            btnJoin.Enabled = false;
-            txtIP.Enabled = false;
-            txtName.Enabled = false;
-
-            var canStart = new Progress<bool>(s =>
-            {
-                btnStart.Enabled = true;
-            }) as IProgress<bool>;
-
-            Task.Run(() => ServerTask(canStart));
         }
 
         private async Task ServerTask(IProgress<bool> canStart)
@@ -492,7 +367,8 @@ namespace MultiSpideyWinForms
                 udpClient = new UdpClient();
                 udpClient.Client.ReceiveTimeout = 5000;
                 udpClient.Connect(serverIp, Port);
-                memoryTimer = new Timer(ReadFromMemory, null, 0, Timeout.Infinite);
+                memoryTimer = new Timer(ReadFromMemory);
+                memoryTimer.Change(0, Timeout.Infinite);
             }) as IProgress<bool>;
 
             Task.Run(() => ClientTask(myName, serverStartedSignal));
@@ -585,7 +461,8 @@ namespace MultiSpideyWinForms
             Task.Run(UdpServerTask);
 
             btnStart.Enabled = false;
-            memoryTimer = new Timer(ReadFromMemory, null, 0, Timeout.Infinite);
+            memoryTimer = new Timer(ReadFromMemory);
+            memoryTimer.Change(0, Timeout.Infinite);
         }
 
         private async Task UdpServerTask()
@@ -656,10 +533,10 @@ namespace MultiSpideyWinForms
             var top = (int)position[4];
             var bottom = (int)position[5];
 
-            var spideyLeft = hostPanel.Left + ((left / 255.0) * clientWidth * 0.8);
-            var spideyRight = hostPanel.Left + ((right / 255.0) * clientWidth * 0.8);
-            var spideyTop = hostPanel.Top + clientHeight * 0.12 + ((top / 175.0) * clientHeight * 0.88);
-            var spideyBottom = hostPanel.Top + clientHeight * 0.12 + ((bottom / 175.0) * clientHeight * 0.88);
+            var spideyLeft = hostPanel.Left + ((left / 255.0) * spideyWindow.BorderlessWidth * 0.8);
+            var spideyRight = hostPanel.Left + ((right / 255.0) * spideyWindow.BorderlessWidth * 0.8);
+            var spideyTop = hostPanel.Top + spideyWindow.BorderlessHeight * 0.12 + ((top / 175.0) * spideyWindow.BorderlessHeight * 0.88);
+            var spideyBottom = hostPanel.Top + spideyWindow.BorderlessHeight * 0.12 + ((bottom / 175.0) * spideyWindow.BorderlessHeight * 0.88);
             
             var levelTitle = new StringBuilder();
 

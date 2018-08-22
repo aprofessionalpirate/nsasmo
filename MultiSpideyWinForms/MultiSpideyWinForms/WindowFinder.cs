@@ -5,7 +5,7 @@ using System.Text;
 
 namespace MultiSpideyWinForms
 {
-    public class WindowFinder
+    public static class WindowFinder
     {
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder strText, int maxCount);

@@ -19,11 +19,22 @@ using Timer = System.Threading.Timer;
 
 namespace MultiSpideyWinForms
 {
+    public enum LoadStatus
+    {
+        WaitingForDosbox,
+        WaitingForPlayer,
+        Ready
+    }
+
     public partial class MultiSpidey : Form
     {
+        private readonly object infoLock = new object();
+        private readonly object _timerLock = new object();
+
         private const int Port = 6015;
 
-        private SpideyWindow spideyWindow;
+        private SpideyWindow _spideyWindow;
+        private Timer _startupTimer = null;
 
         private volatile bool _requestTimerStop = false;
         private Timer memoryTimer;
@@ -35,7 +46,6 @@ namespace MultiSpideyWinForms
 
         private int playerNumber = 1;
         private int players = 1;
-        private readonly object infoLock = new object();
         private byte[] player1Info = new byte[30];
         private byte[] player2Info = new byte[30];
         private byte[] player3Info = new byte[30];
@@ -51,80 +61,147 @@ namespace MultiSpideyWinForms
             InitializeComponent();
         }
 
-        private void btnFindSpidey_Click(object sender, EventArgs e)
+        private void MultiSpidey_Shown(object sender, EventArgs e)
         {
-            if (WindowManager.AttachSpideyWindow(hostPanel.Handle, out SpideyWindow spideyWindow))
-            {
-                btnFindPlayer.Enabled = true;
-                btnFindSpidey.Enabled = false;
+            StartStartupTimer();
+        }
 
-                // Make panel big enough for spidey window
-                // Must be done after attaching window otherwise it will have the incorrect size in high DPI displays
-                hostPanel.Size = new Size(spideyWindow.BorderlessWidth, spideyWindow.BorderlessHeight);
-            }
-            else
+        private void StartStartupTimer()
+        {
+            SetLoadStatus(LoadStatus.WaitingForDosbox);
+            lock (_timerLock)
             {
-                MessageBox.Show("Unable to attach spidey window");
+                _startupTimer = new Timer(AttachToDosbox);
+                _startupTimer.Change(0, 1000);
+            }
+        }
+
+        private void StopStartupTimer()
+        {
+            lock (_timerLock)
+            {
+                if (_startupTimer != null)
+                {
+                    try
+                    {
+                        _startupTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
+                    _startupTimer.Dispose();
+                    _startupTimer = null;
+                }
+            }
+        }
+
+        private void AttachToDosbox(object state)
+        {
+            IntPtr handle;
+            lock (_timerLock)
+            {
+                var timer = state as Timer;
+                if (timer != _startupTimer || _startupTimer == null) return;
+
+                handle = WindowManager.FindSpideyWindow();
+                if (handle == null || handle == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                StopStartupTimer();
+            }
+
+            Invoke(new Action(() =>
+            {
+                _spideyWindow = WindowManager.AttachSpideyWindow(handle, hostPanel.Handle);
+                // Make panel big enough for spidey window. Must be done after
+                // attaching window otherwise it will have the incorrect size
+                // in high DPI displays
+                hostPanel.Size = new Size(_spideyWindow.BorderlessWidth, _spideyWindow.BorderlessHeight);
+                SetLoadStatus(LoadStatus.WaitingForPlayer);
+
+                lock (_timerLock)
+                {
+                    _startupTimer = new Timer(FindPlayerInMemory);
+                    _startupTimer.Change(0, 1000);
+                }
+            }));
+        }
+
+        private void FindPlayerInMemory(object state)
+        {
+            lock (_timerLock)
+            {
+                var timer = state as Timer;
+                if (timer != _startupTimer || _startupTimer == null) return;
+
+                if (!MemoryScanner.GetMemoryAddresses(this, _spideyWindow.Handle))
+                {
+                    return;
+                }
+
+                StopStartupTimer();
+            }
+
+            Invoke(new Action(() =>
+            {
+                SetLoadStatus(LoadStatus.Ready);
+                btnHost.Enabled = true;
+                btnJoin.Enabled = true;
+            }));
+        }
+
+        private void SetLoadStatus(LoadStatus loadStatus)
+        {
+            switch (loadStatus)
+            {
+                case LoadStatus.WaitingForDosbox:
+                    statusStrip.BackColor = Color.Red;
+                    lblLoadStatus.Text = "Waiting for DOSBox to load...";
+                    break;
+                case LoadStatus.WaitingForPlayer:
+                    statusStrip.BackColor = Color.Orange;
+                    lblLoadStatus.Text = "DOSBox captured, scanning for player...";
+                    break;
+                case LoadStatus.Ready:
+                    statusStrip.BackColor = Color.LightGreen;
+                    lblLoadStatus.Text = "Ready to host or join";
+                    break;
             }
         }
         
+        // TODO - sometimes the border shows up, figure out how to reproduce and fix it
         protected override void OnMove(EventArgs e)
         {
-            WindowManager.UpdateSpideyWindow(spideyWindow);
+            WindowManager.UpdateSpideyWindow(_spideyWindow);
             Invalidate();
             base.OnMove(e);
         }
 
         protected override void OnResize(EventArgs e)
         {
-            WindowManager.UpdateSpideyWindow(spideyWindow);
+            WindowManager.UpdateSpideyWindow(_spideyWindow);
             Invalidate();
             base.OnResize(e);
         }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
+            StopStartupTimer();
             _requestTimerStop = true;
-            if (WindowManager.DetachSpideyWindow(spideyWindow))
-            {
-                spideyWindow = null;
-            }
+            WindowManager.DetachSpideyWindow(_spideyWindow);
+            _spideyWindow = null;
 
             base.OnHandleDestroyed(e);
         }
 
         private void btnReset_Click(object sender, EventArgs e)
         {
-            if (WindowManager.DetachSpideyWindow(spideyWindow))
-            {
-                spideyWindow = null;
-            }
-            btnFindPlayer.Enabled = false;
-            btnFindSpidey.Enabled = true;
-        }
-
-        // TODO - should just do this on startup
-        private void btnFindPlayer_Click(object sender, EventArgs e)
-        {
-            btnFindPlayer.Enabled = false;
-
-            var success = new Progress<bool>(s =>
-                                            {
-                                                btnFindPlayer.Enabled = !s;
-                                                btnHost.Enabled = s;
-                                                btnJoin.Enabled = s;
-                                            }) as IProgress<bool>;
-
-            Task.Run(() =>
-            {
-                if (!MemoryScanner.GetMemoryAddresses(this, spideyWindow.Handle))
-                {
-                    Invoke(new Action(() => { MessageBox.Show("Unable to find player, make sure spidey is in game"); }));
-                    success.Report(false);
-                    return;
-                }
-                success.Report(true);
-            });
+            StopStartupTimer();
+            WindowManager.DetachSpideyWindow(_spideyWindow);
+            _spideyWindow = null;
+            StartStartupTimer();
         }
 
         private void btnHost_Click(object sender, EventArgs e)
@@ -533,10 +610,10 @@ namespace MultiSpideyWinForms
             var top = (int)position[4];
             var bottom = (int)position[5];
 
-            var spideyLeft = hostPanel.Left + ((left / 255.0) * spideyWindow.BorderlessWidth * 0.8);
-            var spideyRight = hostPanel.Left + ((right / 255.0) * spideyWindow.BorderlessWidth * 0.8);
-            var spideyTop = hostPanel.Top + spideyWindow.BorderlessHeight * 0.12 + ((top / 175.0) * spideyWindow.BorderlessHeight * 0.88);
-            var spideyBottom = hostPanel.Top + spideyWindow.BorderlessHeight * 0.12 + ((bottom / 175.0) * spideyWindow.BorderlessHeight * 0.88);
+            var spideyLeft = hostPanel.Left + ((left / 255.0) * _spideyWindow.BorderlessWidth * 0.8);
+            var spideyRight = hostPanel.Left + ((right / 255.0) * _spideyWindow.BorderlessWidth * 0.8);
+            var spideyTop = hostPanel.Top + _spideyWindow.BorderlessHeight * 0.12 + ((top / 175.0) * _spideyWindow.BorderlessHeight * 0.88);
+            var spideyBottom = hostPanel.Top + _spideyWindow.BorderlessHeight * 0.12 + ((bottom / 175.0) * _spideyWindow.BorderlessHeight * 0.88);
             
             var levelTitle = new StringBuilder();
 

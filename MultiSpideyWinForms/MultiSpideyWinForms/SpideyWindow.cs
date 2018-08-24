@@ -4,12 +4,23 @@ namespace MultiSpideyWinForms
 {
     public class SpideyWindow
     {
-        public IntPtr Handle { get; set; }
-        public IntPtr OriginalParentHandle { get; set; }
-        public long OriginalWindowInformation { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public int BorderlessWidth { get; set; }
-        public int BorderlessHeight { get; set; }
+        public IntPtr Handle { get; }
+        public IntPtr OriginalParentHandle { get; }
+        public long OriginalWindowInformation { get; }
+        public int Width { get; }
+        public int Height { get; }
+        public int BorderlessWidth { get; }
+        public int BorderlessHeight { get; }
+
+        public SpideyWindow(IntPtr handle, IntPtr originalParentHandle, long originalWindowInformation, int width, int height, int borderlessWidth, int borderlessHeight)
+        {
+            Handle = handle;
+            OriginalParentHandle = originalParentHandle;
+            OriginalWindowInformation = originalWindowInformation;
+            Width = width;
+            Height = height;
+            BorderlessWidth = borderlessWidth;
+            BorderlessHeight = borderlessHeight;
+        }
     }
 }

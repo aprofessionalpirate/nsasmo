@@ -2,12 +2,25 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace MultiSpideyWinForms
 {
     public static class MemoryScanner
     {
+        public static readonly bool Is64BitProcess = (IntPtr.Size == 8);
+
+        private static long _spideyAddress;
+        private static long _levelAddress;
+        private static long _dosBoxProcess;
+
+        private const int PROCESS_QUERY_INFORMATION = 0x0400;
+        private const int PROCESS_WM_READ = 0x0010;
+
+        private const string MARY_JANE_IS_DEAD = "4D617279204A616E6520697320444541442100";
+        private const string CREDITS = "4D7973746572696F202020202020202020202020202020204A2E4A6F6E6168204A616D65736F6E20202020202020202043686565736563616B652020202020202020202020202020456C76696520202020202020202020202020202020202020436F6C696E20202020202020202020202020202020202020466C6173682054686F6D70736F6E202020202020202020204A6F6520526F62657274736F6E2020202020202020202020444D502020202020202020202020202020202020202020204B69636B6168612074686520547269636B737465722020205357472020202020202020202020202020202020202020204B52412020202020202020202020202020202020202020204368616D706965202020202020202020202020202020202052696B2020202020202020202020202020202020202020204D617279204A616E652020202020202020202020202020205065746572205061726B657220202020202020202020202041756E74204D6179";
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
@@ -22,9 +35,7 @@ namespace MultiSpideyWinForms
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION64 lpBuffer, uint dwLength);
-
-        public static bool Is64BitProcess = (IntPtr.Size == 8);
-
+        
         [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool IsWow64Process(
@@ -49,12 +60,6 @@ namespace MultiSpideyWinForms
                 return false;
             }
         }
-
-        private const int PROCESS_QUERY_INFORMATION = 0x0400;
-        private const int PROCESS_WM_READ = 0x0010;
-
-        private const string MaryJaneIsDead = "4D617279204A616E6520697320444541442100";
-        private const string Credits = "4D7973746572696F202020202020202020202020202020204A2E4A6F6E6168204A616D65736F6E20202020202020202043686565736563616B652020202020202020202020202020456C76696520202020202020202020202020202020202020436F6C696E20202020202020202020202020202020202020466C6173682054686F6D70736F6E202020202020202020204A6F6520526F62657274736F6E2020202020202020202020444D502020202020202020202020202020202020202020204B69636B6168612074686520547269636B737465722020205357472020202020202020202020202020202020202020204B52412020202020202020202020202020202020202020204368616D706965202020202020202020202020202020202052696B2020202020202020202020202020202020202020204D617279204A616E652020202020202020202020202020205065746572205061726B657220202020202020202020202041756E74204D6179";
 
         [StructLayout(LayoutKind.Sequential)]
         public struct MEMORY_BASIC_INFORMATION
@@ -138,11 +143,6 @@ namespace MultiSpideyWinForms
             MEM_PRIVATE = 0x20000
         }
 
-        private static IntPtr dosBoxProcess = IntPtr.Zero;
-
-        private static int spideyAddress;
-        private static int levelAddress;
-
         public static bool GetMemoryAddresses(Form form, IntPtr window)
         {
             GetWindowThreadProcessId(window, out uint processId);
@@ -157,7 +157,7 @@ namespace MultiSpideyWinForms
                 form.Invoke(new Action(() => { MessageBox.Show("DOSBox process is 64-bit, please use 32-bit DOSBox"); }));
                 return false;
             }
-            
+
             IntPtr proc_min_address = IntPtr.Zero;
 
             // saving the values as long ints so I won't have to do a lot of casts later
@@ -165,8 +165,10 @@ namespace MultiSpideyWinForms
             long proc_max_address_l = 0x7fffffff;
 
             // opening the process with desired access level
-            dosBoxProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_WM_READ, false, process.Id);
-            
+            var dosBoxProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_WM_READ, false, process.Id);
+
+            long spideyAddress = 0;
+            long levelAddress = 0;
             if (!Is64BitProcess)
             {
                 // this will store any information we get from VirtualQueryEx()
@@ -201,11 +203,11 @@ namespace MultiSpideyWinForms
                         int maryJaneIsDeadIndex = 0;
                         int creditsIndex = 0;
 
-                        if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MaryJaneIsDead)) > 0 &&
-                            (creditsIndex = line.ToString().IndexOf(Credits)) > 0)
+                        if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MARY_JANE_IS_DEAD)) > 0 &&
+                            (creditsIndex = line.ToString().IndexOf(CREDITS)) > 0)
                         {
-                            spideyAddress = (int)mem_basic_info.BaseAddress + maryJaneIsDeadIndex / 2 + MaryJaneIsDead.Length / 2 + 32;
-                            levelAddress = (int)mem_basic_info.BaseAddress + creditsIndex / 2 + Credits.Length / 2 + 734;
+                            spideyAddress = Convert.ToInt64(mem_basic_info.BaseAddress + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2 + 32);
+                            levelAddress = Convert.ToInt64(mem_basic_info.BaseAddress + creditsIndex / 2 + CREDITS.Length / 2 + 734);
                             break;
                         }
                     }
@@ -250,11 +252,11 @@ namespace MultiSpideyWinForms
                         int maryJaneIsDeadIndex = 0;
                         int creditsIndex = 0;
 
-                        if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MaryJaneIsDead)) > 0 &&
-                            (creditsIndex = line.ToString().IndexOf(Credits)) > 0)
+                        if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MARY_JANE_IS_DEAD)) > 0 &&
+                            (creditsIndex = line.ToString().IndexOf(CREDITS)) > 0)
                         {
-                            spideyAddress = (int)mem_basic_info64.BaseAddress + maryJaneIsDeadIndex / 2 + MaryJaneIsDead.Length / 2 + 32;
-                            levelAddress = (int)mem_basic_info64.BaseAddress + creditsIndex / 2 + Credits.Length / 2 + 734;
+                            spideyAddress = Convert.ToInt64(mem_basic_info64.BaseAddress + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2 + 32);
+                            levelAddress = Convert.ToInt64(mem_basic_info64.BaseAddress + creditsIndex / 2 + CREDITS.Length / 2 + 734);
                             break;
                         }
                     }
@@ -265,27 +267,37 @@ namespace MultiSpideyWinForms
                 }
             }
 
+            Interlocked.Exchange(ref _dosBoxProcess, Convert.ToInt64(dosBoxProcess));
+            Interlocked.Exchange(ref _spideyAddress, spideyAddress);
+            Interlocked.Exchange(ref _levelAddress, levelAddress);
+
             return (spideyAddress > 0 && levelAddress > 0);
         }
 
         public static byte[] ReadSpideyPosition()
         {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var spideyAddress = Interlocked.Read(ref _spideyAddress);
+
             var spideyBuffer = new byte[6];
             if (spideyAddress != 0)
             {
                 int bytesRead = 0;
-                ReadProcessMemory((int)dosBoxProcess, spideyAddress, spideyBuffer, 6, ref bytesRead);
+                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(spideyAddress), spideyBuffer, 6, ref bytesRead);
             }
             return spideyBuffer;
         }
 
         public static byte[] ReadLevelTitle()
         {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var levelAddress = Interlocked.Read(ref _levelAddress);
+
             var levelBuffer = new byte[24];
             if (levelAddress != 0)
             {
                 int bytesRead = 0;
-                ReadProcessMemory((int)dosBoxProcess, levelAddress, levelBuffer, 24, ref bytesRead);
+                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(levelAddress), levelBuffer, 24, ref bytesRead);
             }
 
             return levelBuffer;

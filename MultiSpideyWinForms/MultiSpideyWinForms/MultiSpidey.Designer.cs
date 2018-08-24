@@ -30,8 +30,6 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MultiSpidey));
             this.hostPanel = new System.Windows.Forms.Panel();
-            this.btnFindSpidey = new System.Windows.Forms.Button();
-            this.btnFindPlayer = new System.Windows.Forms.Button();
             this.lblPlayer1Name = new System.Windows.Forms.Label();
             this.player3Sprite = new System.Windows.Forms.PictureBox();
             this.player2Sprite = new System.Windows.Forms.PictureBox();
@@ -48,8 +46,11 @@
             this.lblPlayer1Loc = new System.Windows.Forms.Label();
             this.lblPlayer2Loc = new System.Windows.Forms.Label();
             this.lblPlayer3Loc = new System.Windows.Forms.Label();
+            this.statusStrip = new System.Windows.Forms.StatusStrip();
+            this.lblLoadStatus = new System.Windows.Forms.ToolStripStatusLabel();
             ((System.ComponentModel.ISupportInitialize)(this.player3Sprite)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.player2Sprite)).BeginInit();
+            this.statusStrip.SuspendLayout();
             this.SuspendLayout();
             // 
             // hostPanel
@@ -59,27 +60,6 @@
             this.hostPanel.Name = "hostPanel";
             this.hostPanel.Size = new System.Drawing.Size(640, 400);
             this.hostPanel.TabIndex = 0;
-            // 
-            // btnFindSpidey
-            // 
-            this.btnFindSpidey.Location = new System.Drawing.Point(9, 12);
-            this.btnFindSpidey.Name = "btnFindSpidey";
-            this.btnFindSpidey.Size = new System.Drawing.Size(152, 42);
-            this.btnFindSpidey.TabIndex = 0;
-            this.btnFindSpidey.Text = "Find Spidey";
-            this.btnFindSpidey.UseVisualStyleBackColor = true;
-            this.btnFindSpidey.Click += new System.EventHandler(this.btnFindSpidey_Click);
-            // 
-            // btnFindPlayer
-            // 
-            this.btnFindPlayer.Enabled = false;
-            this.btnFindPlayer.Location = new System.Drawing.Point(9, 61);
-            this.btnFindPlayer.Name = "btnFindPlayer";
-            this.btnFindPlayer.Size = new System.Drawing.Size(152, 43);
-            this.btnFindPlayer.TabIndex = 1;
-            this.btnFindPlayer.Text = "Find Player";
-            this.btnFindPlayer.UseVisualStyleBackColor = true;
-            this.btnFindPlayer.Click += new System.EventHandler(this.btnFindPlayer_Click);
             // 
             // lblPlayer1Name
             // 
@@ -234,11 +214,27 @@
             this.lblPlayer3Loc.TabIndex = 20;
             this.lblPlayer3Loc.Text = "Not Started";
             // 
+            // statusStrip
+            // 
+            this.statusStrip.ImageScalingSize = new System.Drawing.Size(24, 24);
+            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.lblLoadStatus});
+            this.statusStrip.Location = new System.Drawing.Point(0, 741);
+            this.statusStrip.Name = "statusStrip";
+            this.statusStrip.Size = new System.Drawing.Size(1065, 28);
+            this.statusStrip.TabIndex = 21;
+            // 
+            // lblLoadStatus
+            // 
+            this.lblLoadStatus.Name = "lblLoadStatus";
+            this.lblLoadStatus.Size = new System.Drawing.Size(0, 23);
+            // 
             // MultiSpidey
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1065, 769);
+            this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.lblPlayer3Loc);
             this.Controls.Add(this.lblPlayer2Loc);
             this.Controls.Add(this.lblPlayer1Loc);
@@ -255,15 +251,16 @@
             this.Controls.Add(this.player2Sprite);
             this.Controls.Add(this.player3Sprite);
             this.Controls.Add(this.lblPlayer1Name);
-            this.Controls.Add(this.btnFindPlayer);
-            this.Controls.Add(this.btnFindSpidey);
             this.Controls.Add(this.hostPanel);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "MultiSpidey";
             this.Text = "The Not So Amazing Multiplayer Spiderman";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            this.Shown += new System.EventHandler(this.MultiSpidey_Shown);
             ((System.ComponentModel.ISupportInitialize)(this.player3Sprite)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.player2Sprite)).EndInit();
+            this.statusStrip.ResumeLayout(false);
+            this.statusStrip.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -272,8 +269,6 @@
         #endregion
 
         private System.Windows.Forms.Panel hostPanel;
-        private System.Windows.Forms.Button btnFindSpidey;
-        private System.Windows.Forms.Button btnFindPlayer;
         private System.Windows.Forms.Label lblPlayer1Name;
         private System.Windows.Forms.PictureBox player3Sprite;
         private System.Windows.Forms.PictureBox player2Sprite;
@@ -290,6 +285,8 @@
         private System.Windows.Forms.Label lblPlayer1Loc;
         private System.Windows.Forms.Label lblPlayer2Loc;
         private System.Windows.Forms.Label lblPlayer3Loc;
+        private System.Windows.Forms.StatusStrip statusStrip;
+        private System.Windows.Forms.ToolStripStatusLabel lblLoadStatus;
     }
 }
 

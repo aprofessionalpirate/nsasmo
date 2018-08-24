@@ -83,24 +83,15 @@ namespace MultiSpideyWinForms
             }
         }
 
-        public static bool AttachSpideyWindow(IntPtr newParent, out SpideyWindow spideyWindow)
+        public static IntPtr FindSpideyWindow()
         {
-            var handle = WindowFinder.FindWindowsWithText(SPIDEY_WINDOW_TITLE).FirstOrDefault();
+            return WindowFinder.FindWindowsWithText(SPIDEY_WINDOW_TITLE).FirstOrDefault();
+        }
 
-            if (handle == null || handle == IntPtr.Zero)
-            {
-                spideyWindow = null;
-                return false;
-            }
-
-            spideyWindow = new SpideyWindow();
-
+        public static SpideyWindow AttachSpideyWindow(IntPtr handle, IntPtr newParent)
+        {
             var originalParentHandle = GetParent(handle);
             var originalWindowInformation = GetWindowLong(handle, GWL_STYLE);
-
-            spideyWindow.Handle = handle;
-            spideyWindow.OriginalParentHandle = originalParentHandle;
-            spideyWindow.OriginalWindowInformation = originalWindowInformation;
 
             SetParent(handle, newParent);
 
@@ -113,35 +104,36 @@ namespace MultiSpideyWinForms
             SetParent(handle, newParent);
             GetClientRect(handle, out RECT clientRect);
             GetWindowRect(handle, out windowRect);
-            spideyWindow.BorderlessWidth = clientRect.Right - clientRect.Left;
-            spideyWindow.BorderlessHeight = clientRect.Bottom - clientRect.Top;
-            spideyWindow.Width = windowRect.Right - windowRect.Left;
-            spideyWindow.Height = windowRect.Bottom - windowRect.Top;
+            var borderlessWidth = clientRect.Right - clientRect.Left;
+            var borderlessHeight = clientRect.Bottom - clientRect.Top;
+            var width = windowRect.Right - windowRect.Left;
+            var height = windowRect.Bottom - windowRect.Top;
 
             // Remove border and whatnot
             SetWindowLong(handle, GWL_STYLE, WS_VISIBLE);
 
             // Move the window to overlay it on this window
-            MoveWindow(handle, 0, 0, spideyWindow.Width, spideyWindow.Height, true);
+            MoveWindow(handle, 0, 0, width, height, true);
 
-            return true;
+            return new SpideyWindow(handle, originalParentHandle, originalWindowInformation, width, height, borderlessWidth, borderlessHeight);
         }
 
         public static void UpdateSpideyWindow(SpideyWindow spideyWindow)
         {
-            if (spideyWindow.Handle != null && spideyWindow.Handle != IntPtr.Zero)
+            if (spideyWindow != null && spideyWindow.Handle != null && spideyWindow.Handle != IntPtr.Zero)
             {
                 // Have move it off 0, 0 first otherwise it won't update
-                MoveWindow(spideyWindow.Handle, 1, 1, spideyWindow.Width, spideyWindow.Height, true);
-                MoveWindow(spideyWindow.Handle, 0, 0, spideyWindow.Width, spideyWindow.Height, true);
+                MoveWindow(spideyWindow.Handle, 1, 1, spideyWindow.BorderlessWidth, spideyWindow.BorderlessHeight, true);
+                MoveWindow(spideyWindow.Handle, 0, 0, spideyWindow.BorderlessWidth, spideyWindow.BorderlessHeight, true);
             }
         }
 
         public static bool DetachSpideyWindow(SpideyWindow spideyWindow)
         {
-            if (spideyWindow.Handle != null && spideyWindow.Handle != IntPtr.Zero &&
-                spideyWindow.OriginalParentHandle != null && spideyWindow.OriginalParentHandle != IntPtr.Zero &&
-                spideyWindow.OriginalWindowInformation != 0)
+            // Don't check if OriginalParentHandle is IntPtr.Zero as it will be
+            if (spideyWindow != null && 
+                spideyWindow.Handle != null && spideyWindow.Handle != IntPtr.Zero &&
+                spideyWindow.OriginalParentHandle != null && spideyWindow.OriginalWindowInformation != 0)
             {
                 SetParent(spideyWindow.Handle, spideyWindow.OriginalParentHandle);
                 SetWindowLong(spideyWindow.Handle, GWL_STYLE, spideyWindow.OriginalWindowInformation);

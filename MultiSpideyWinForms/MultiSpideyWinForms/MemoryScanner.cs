@@ -206,8 +206,8 @@ namespace MultiSpideyWinForms
                         if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MARY_JANE_IS_DEAD)) > 0 &&
                             (creditsIndex = line.ToString().IndexOf(CREDITS)) > 0)
                         {
-                            spideyAddress = Convert.ToInt64(mem_basic_info.BaseAddress + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2 + 32);
-                            levelAddress = Convert.ToInt64(mem_basic_info.BaseAddress + creditsIndex / 2 + CREDITS.Length / 2 + 734);
+                            spideyAddress = Convert.ToInt64(mem_basic_info.BaseAddress.ToInt32() + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2 + 32);
+                            levelAddress = Convert.ToInt64(mem_basic_info.BaseAddress.ToInt32() + creditsIndex / 2 + CREDITS.Length / 2 + 734);
                             break;
                         }
                     }
@@ -267,7 +267,7 @@ namespace MultiSpideyWinForms
                 }
             }
 
-            Interlocked.Exchange(ref _dosBoxProcess, Convert.ToInt64(dosBoxProcess));
+            Interlocked.Exchange(ref _dosBoxProcess, dosBoxProcess.ToInt64());
             Interlocked.Exchange(ref _spideyAddress, spideyAddress);
             Interlocked.Exchange(ref _levelAddress, levelAddress);
 

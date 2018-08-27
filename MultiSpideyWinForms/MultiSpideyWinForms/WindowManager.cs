@@ -123,8 +123,8 @@ namespace MultiSpideyWinForms
             if (spideyWindow != null && spideyWindow.Handle != null && spideyWindow.Handle != IntPtr.Zero)
             {
                 // Have move it off 0, 0 first otherwise it won't update
-                MoveWindow(spideyWindow.Handle, 1, 1, spideyWindow.BorderlessWidth, spideyWindow.BorderlessHeight, true);
-                MoveWindow(spideyWindow.Handle, 0, 0, spideyWindow.BorderlessWidth, spideyWindow.BorderlessHeight, true);
+                MoveWindow(spideyWindow.Handle, 1, 1, spideyWindow.Width, spideyWindow.Height, true);
+                MoveWindow(spideyWindow.Handle, 0, 0, spideyWindow.Width, spideyWindow.Height, true);
             }
         }
 

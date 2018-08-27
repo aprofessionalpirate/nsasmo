@@ -129,11 +129,11 @@
   </data>
   <data name="player2Sprite.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
     <value>
-        iVBORw0KGgoAAAANSUhEUgAAAAkAAAAVCAYAAACUhcTwAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAL
-        EwAACxMBAJqcGAAAAAd0SU1FB+EBFwETIc0mH+oAAACKSURBVDhPlc/RDYAgDARQNvSHDf1hAbcjQU44
-        LG3BaNKA5XFAuI5zVP1KqpVjfApz9AySAOMW5ZzXSfI4k0TAApiSCKaFXn0dP2lChOKUUGJslwTi/BMh
-        2UWobRJT5GgQ4pmGuYaUA8qXLhEhwUAaNvTC/6hdtgH3Tvr5LpLAvE4Db9NoqKbohXIDrc1Gy9LYwB8A
-        AAAASUVORK5CYII=
+        iVBORw0KGgoAAAANSUhEUgAAAAkAAAAVCAYAAACUhcTwAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
+        YQUAAAAJcEhZcwAACxMAAAsTAQCanBgAAAAHdElNRQfhARcBEyHNJh/qAAAAiklEQVQ4T5XP0Q2AIAwE
+        UDb0hw39YQG3I0FOOCxtwWjSgOVxQLiOc1T9SqqVY3wKc/QMkgDjFuWc10nyOJNEwAKYkgimhV59HT9p
+        QoTilFBibJcE4vwTIdlFqG0SU+RoEOKZhrmGlAPKly4RIcFAGjb0wv+oXbYB9076+S6SwLxOA2/TaKim
+        6IVyA63NRsvS2MAfAAAAAElFTkSuQmCC
 </value>
   </data>
   <metadata name="statusStrip.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MultiSpideyWinForms.Properties;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;

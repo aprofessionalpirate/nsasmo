@@ -15,11 +15,19 @@ namespace MultiSpideyWinForms
         private static long _levelAddress;
         private static long _dosBoxProcess;
 
+        private static readonly IntPtr _minimumAddress = IntPtr.Zero;
+        private static readonly long _minimumAddressLong = _minimumAddress.ToInt64();
+        private static readonly long _maximumAddressLong = 0x7fffffff;
+        private static readonly uint _dwLength = Is64BitProcess ? Convert.ToUInt32(Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION64))) : Convert.ToUInt32(Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))); 
+
         private const int PROCESS_QUERY_INFORMATION = 0x0400;
         private const int PROCESS_WM_READ = 0x0010;
 
-        private const string MARY_JANE_IS_DEAD = "4D617279204A616E6520697320444541442100";
+        private const string MARY_JANE_IS_DEAD = "4D617279204A616E65206973204445414421";
         private const string CREDITS = "4D7973746572696F202020202020202020202020202020204A2E4A6F6E6168204A616D65736F6E20202020202020202043686565736563616B652020202020202020202020202020456C76696520202020202020202020202020202020202020436F6C696E20202020202020202020202020202020202020466C6173682054686F6D70736F6E202020202020202020204A6F6520526F62657274736F6E2020202020202020202020444D502020202020202020202020202020202020202020204B69636B6168612074686520547269636B737465722020205357472020202020202020202020202020202020202020204B52412020202020202020202020202020202020202020204368616D706965202020202020202020202020202020202052696B2020202020202020202020202020202020202020204D617279204A616E652020202020202020202020202020205065746572205061726B657220202020202020202020202041756E74204D6179";
+
+        private const int PLAYER_INFO_SIZE = 48;
+        private const int LEVEL_INFO_SIZE = 24;
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -43,24 +51,7 @@ namespace MultiSpideyWinForms
             [Out] out bool wow64Process
         );
 
-        private static bool IsProcessWow64(Process process)
-        {
-            if ((Environment.OSVersion.Version.Major == 5 && Environment.OSVersion.Version.Minor >= 1) ||
-                Environment.OSVersion.Version.Major >= 6)
-            {
-                bool retVal;
-                if (!IsWow64Process(process.Handle, out retVal))
-                {
-                    return false;
-                }
-                return retVal;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
+        // Size in bytes = 28
         [StructLayout(LayoutKind.Sequential)]
         public struct MEMORY_BASIC_INFORMATION
         {
@@ -73,6 +64,7 @@ namespace MultiSpideyWinForms
             public TypeEnum Type;
         }
 
+        // Size in bytes = 48 (double check this)
         [StructLayout(LayoutKind.Sequential)]
         public struct MEMORY_BASIC_INFORMATION64
         {
@@ -149,122 +141,89 @@ namespace MultiSpideyWinForms
             var process = Process.GetProcessById((int)processId);
 
             if (process == null)
+            {
                 return false;
+            }
 
-            // Getting minimum & maximum address
             if ((Is64BitProcess || IsProcessWow64(Process.GetCurrentProcess())) && !IsProcessWow64(process))
             {
                 form.Invoke(new Action(() => { MessageBox.Show("DOSBox process is 64-bit, please use 32-bit DOSBox"); }));
                 return false;
             }
 
-            IntPtr proc_min_address = IntPtr.Zero;
-
-            // saving the values as long ints so I won't have to do a lot of casts later
-            long proc_min_address_l = (long)proc_min_address;
-            long proc_max_address_l = 0x7fffffff;
-
-            // opening the process with desired access level
+            // Open the process with desired access level
             var dosBoxProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_WM_READ, false, process.Id);
+            var dosBoxProcessInt32 = dosBoxProcess.ToInt32();
 
             long spideyAddress = 0;
             long levelAddress = 0;
-            if (!Is64BitProcess)
+
+            var bytesRead = 0;  // Number of bytes read with ReadProcessMemory
+
+            var currentAddress = _minimumAddress;
+            var currentAddressLong = _minimumAddressLong;
+            while (currentAddressLong < _maximumAddressLong)
             {
-                // this will store any information we get from VirtualQueryEx()
-                var mem_basic_info = new MEMORY_BASIC_INFORMATION();
-                int bytesRead = 0;  // number of bytes read with ReadProcessMemory
-                var dwLength = (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION)); // 28 = sizeof(MEMORY_BASIC_INFORMATION)
-                while (proc_min_address_l < proc_max_address_l)
+                int result;
+                AllocationProtectEnum protection;
+                StateEnum state;
+                int regionSize;
+                int baseAddress;
+                if (!Is64BitProcess)
                 {
-                    var result = VirtualQueryEx(dosBoxProcess, proc_min_address, out mem_basic_info, dwLength);
-                    if (result == 0)
+                    result = VirtualQueryEx(dosBoxProcess, currentAddress, out MEMORY_BASIC_INFORMATION memoryBasicInformation, _dwLength);
+                    protection = memoryBasicInformation.Protect;
+                    state = memoryBasicInformation.State;
+                    regionSize = Convert.ToInt32(memoryBasicInformation.RegionSize);
+                    baseAddress = memoryBasicInformation.BaseAddress.ToInt32();
+                }
+                else
+                {
+                    result = VirtualQueryEx(dosBoxProcess, currentAddress, out MEMORY_BASIC_INFORMATION64 memoryBasicInformation, _dwLength);
+                    protection = memoryBasicInformation.Protect;
+                    state = memoryBasicInformation.State;
+                    regionSize = Convert.ToInt32(memoryBasicInformation.RegionSize);
+                    baseAddress = memoryBasicInformation.BaseAddress.ToInt32();
+                }
+
+                if (result == 0)
+                {
+                    form.Invoke(new Action(() => { MessageBox.Show("VirtualQueryEx failed"); }));
+                    break;
+                }
+
+                // Check if this memory chunk is accessible
+                // Could also just check if protection != PAGE_GUARD (possibly more to check) to access more memory areas
+                if (protection == AllocationProtectEnum.PAGE_READWRITE && state == StateEnum.MEM_COMMIT)
+                {
+                    var buffer = new byte[regionSize];
+
+                    // Read everything into buffer
+                    ReadProcessMemory(dosBoxProcessInt32, baseAddress, buffer, regionSize, ref bytesRead);
+
+                    // TODO - refactor this to make it faster, maybe don't convert everything to string?
+                    var line = new StringBuilder();
+                    for (var i = 0; i < regionSize; i++)
                     {
-                        form.Invoke(new Action(() => { MessageBox.Show("VirtualQueryEx failed"); }));
+                        //sw.WriteLine("0x{0} : {1}", ((int)mem_basic_info.BaseAddress + i).ToString("X"), (char)buffer[i]);
+                        line.Append(buffer[i].ToString("X2"));
+                    }
+
+                    var maryJaneIsDeadIndex = 0;
+                    var creditsIndex = 0;
+
+                    if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MARY_JANE_IS_DEAD)) > 0 &&
+                        (creditsIndex = line.ToString().IndexOf(CREDITS)) > 0)
+                    {
+                        spideyAddress = Convert.ToInt64(baseAddress + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2);
+                        levelAddress = Convert.ToInt64(baseAddress + creditsIndex / 2 + CREDITS.Length / 2 + 734);
                         break;
                     }
-
-                    // if this memory chunk is accessible
-                    // Could also just check if .Protect != PAGE_GUARD (possibly more to check) to access more memory areas
-                    if (mem_basic_info.Protect == AllocationProtectEnum.PAGE_READWRITE && mem_basic_info.State == StateEnum.MEM_COMMIT)
-                    {
-                        var buffer = new byte[mem_basic_info.RegionSize];
-
-                        // read everything in the buffer above
-                        ReadProcessMemory((int)dosBoxProcess, (int)mem_basic_info.BaseAddress, buffer, (int)mem_basic_info.RegionSize, ref bytesRead);
-
-                        var line = new StringBuilder();
-                        for (int i = 0; i < mem_basic_info.RegionSize; i++)
-                        {
-                            //sw.WriteLine("0x{0} : {1}", ((int)mem_basic_info.BaseAddress + i).ToString("X"), (char)buffer[i]);
-                            line.Append(buffer[i].ToString("X2"));
-                        }
-
-                        int maryJaneIsDeadIndex = 0;
-                        int creditsIndex = 0;
-
-                        if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MARY_JANE_IS_DEAD)) > 0 &&
-                            (creditsIndex = line.ToString().IndexOf(CREDITS)) > 0)
-                        {
-                            spideyAddress = Convert.ToInt64(mem_basic_info.BaseAddress.ToInt32() + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2 + 32);
-                            levelAddress = Convert.ToInt64(mem_basic_info.BaseAddress.ToInt32() + creditsIndex / 2 + CREDITS.Length / 2 + 734);
-                            break;
-                        }
-                    }
-
-                    // move to the next memory chunk
-                    proc_min_address_l += mem_basic_info.RegionSize;
-                    proc_min_address = new IntPtr(proc_min_address_l);
                 }
-            }
-            else
-            {
-                // this will store any information we get from VirtualQueryEx()
-                var mem_basic_info64 = new MEMORY_BASIC_INFORMATION64();
-                int bytesRead = 0;  // number of bytes read with ReadProcessMemory
-                var dwLength = (uint)Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION64)); // 28 = sizeof(MEMORY_BASIC_INFORMATION)
 
-                while (proc_min_address_l < proc_max_address_l)
-                {
-                    var result = VirtualQueryEx(dosBoxProcess, proc_min_address, out mem_basic_info64, dwLength);
-                    if (result == 0)
-                    {
-                        form.Invoke(new Action(() => { MessageBox.Show("VirtualQueryEx failed"); }));
-                        break;
-                    }
-
-                    // if this memory chunk is accessible
-                    // Could also just check if .Protect != PAGE_GUARD (possibly more to check) to access more memory areas
-                    if (mem_basic_info64.Protect == AllocationProtectEnum.PAGE_READWRITE && mem_basic_info64.State == StateEnum.MEM_COMMIT)
-                    {
-                        var buffer = new byte[mem_basic_info64.RegionSize];
-
-                        // read everything in the buffer above
-                        ReadProcessMemory((int)dosBoxProcess, (int)mem_basic_info64.BaseAddress, buffer, (int)mem_basic_info64.RegionSize, ref bytesRead);
-
-                        var line = new StringBuilder();
-                        for (int i = 0; i < mem_basic_info64.RegionSize; i++)
-                        {
-                            //sw.WriteLine("0x{0} : {1}", ((int)mem_basic_info.BaseAddress + i).ToString("X"), (char)buffer[i]);
-                            line.Append(buffer[i].ToString("X2"));
-                        }
-
-                        int maryJaneIsDeadIndex = 0;
-                        int creditsIndex = 0;
-
-                        if ((maryJaneIsDeadIndex = line.ToString().IndexOf(MARY_JANE_IS_DEAD)) > 0 &&
-                            (creditsIndex = line.ToString().IndexOf(CREDITS)) > 0)
-                        {
-                            spideyAddress = Convert.ToInt64(mem_basic_info64.BaseAddress + maryJaneIsDeadIndex / 2 + MARY_JANE_IS_DEAD.Length / 2 + 32);
-                            levelAddress = Convert.ToInt64(mem_basic_info64.BaseAddress + creditsIndex / 2 + CREDITS.Length / 2 + 734);
-                            break;
-                        }
-                    }
-
-                    // move to the next memory chunk
-                    proc_min_address_l += mem_basic_info64.RegionSize;
-                    proc_min_address = new IntPtr(proc_min_address_l);
-                }
+                // Move to the next memory chunk
+                currentAddress += regionSize;
+                currentAddressLong += regionSize;
             }
 
             Interlocked.Exchange(ref _dosBoxProcess, dosBoxProcess.ToInt64());
@@ -274,16 +233,34 @@ namespace MultiSpideyWinForms
             return (spideyAddress > 0 && levelAddress > 0);
         }
 
-        public static byte[] ReadSpideyPosition()
+        private static bool IsProcessWow64(Process process)
+        {
+            if ((Environment.OSVersion.Version.Major == 5 && Environment.OSVersion.Version.Minor >= 1) ||
+                Environment.OSVersion.Version.Major >= 6)
+            {
+                bool retVal;
+                if (!IsWow64Process(process.Handle, out retVal))
+                {
+                    return false;
+                }
+                return retVal;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        public static byte[] ReadSpideyInfo()
         {
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var spideyAddress = Interlocked.Read(ref _spideyAddress);
 
-            var spideyBuffer = new byte[6];
+            var spideyBuffer = new byte[PLAYER_INFO_SIZE];
             if (spideyAddress != 0)
             {
                 int bytesRead = 0;
-                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(spideyAddress), spideyBuffer, 6, ref bytesRead);
+                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(spideyAddress), spideyBuffer, PLAYER_INFO_SIZE, ref bytesRead);
             }
             return spideyBuffer;
         }
@@ -293,11 +270,11 @@ namespace MultiSpideyWinForms
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var levelAddress = Interlocked.Read(ref _levelAddress);
 
-            var levelBuffer = new byte[24];
+            var levelBuffer = new byte[LEVEL_INFO_SIZE];
             if (levelAddress != 0)
             {
                 int bytesRead = 0;
-                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(levelAddress), levelBuffer, 24, ref bytesRead);
+                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(levelAddress), levelBuffer, LEVEL_INFO_SIZE, ref bytesRead);
             }
 
             return levelBuffer;

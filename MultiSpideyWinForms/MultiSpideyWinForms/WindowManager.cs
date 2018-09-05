@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -83,9 +84,9 @@ namespace MultiSpideyWinForms
             }
         }
 
-        public static IntPtr FindSpideyWindow()
+        public static IEnumerable<IntPtr> FindSpideyWindows()
         {
-            return WindowFinder.FindWindowsWithText(SPIDEY_WINDOW_TITLE).FirstOrDefault();
+            return WindowFinder.FindWindowsWithText(SPIDEY_WINDOW_TITLE);
         }
 
         public static SpideyWindow AttachSpideyWindow(IntPtr handle, IntPtr newParent)
@@ -114,6 +115,21 @@ namespace MultiSpideyWinForms
 
             // Move the window to overlay it on this window
             MoveWindow(handle, 0, 0, width, height, true);
+
+            return new SpideyWindow(handle, originalParentHandle, originalWindowInformation, width, height, borderlessWidth, borderlessHeight);
+        }
+
+        public static SpideyWindow GetSpideyWindow(IntPtr handle)
+        {
+            var originalParentHandle = GetParent(handle);
+            var originalWindowInformation = GetWindowLong(handle, GWL_STYLE);
+
+            GetWindowRect(handle, out RECT windowRect);
+            GetClientRect(handle, out RECT clientRect);
+            var borderlessWidth = clientRect.Right - clientRect.Left;
+            var borderlessHeight = clientRect.Bottom - clientRect.Top;
+            var width = windowRect.Right - windowRect.Left;
+            var height = windowRect.Bottom - windowRect.Top;
 
             return new SpideyWindow(handle, originalParentHandle, originalWindowInformation, width, height, borderlessWidth, borderlessHeight);
         }

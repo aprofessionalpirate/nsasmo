@@ -1,5 +1,4 @@
-﻿using MultiSpideyWinForms.Properties;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -17,11 +16,13 @@ using Timer = System.Threading.Timer;
 // Fix workaround for getting width/height
 // Use SetWindowPos instead of MoveWindow
 // Interpolation of player position
+// Sometimes the border shows up on spidey window, figure out how to reproduce (something to do with moving the windows) and fix it
 
 namespace MultiSpideyWinForms
 {
     public enum LoadStatus
     {
+        NotStarted,
         WaitingForDosbox,
         WaitingForPlayer,
         Ready
@@ -67,8 +68,14 @@ namespace MultiSpideyWinForms
             StartStartupTimer();
         }
 
+        private void btnRescan_Click(object sender, EventArgs e)
+        {
+            StartStartupTimer();
+        }
+
         private void StartStartupTimer()
         {
+            btnRescan.Enabled = false;
             SetLoadStatus(LoadStatus.WaitingForDosbox);
             lock (_timerLock)
             {
@@ -98,14 +105,14 @@ namespace MultiSpideyWinForms
 
         private void AttachToDosbox(object state)
         {
-            IntPtr handle;
+            IEnumerable<IntPtr> handles;
             lock (_timerLock)
             {
                 var timer = state as Timer;
                 if (timer != _startupTimer || _startupTimer == null) return;
 
-                handle = WindowManager.FindSpideyWindow();
-                if (handle == null || handle == IntPtr.Zero)
+                handles = WindowManager.FindSpideyWindows();
+                if (handles == null || handles.Count() == 0 || handles.All(h => h == IntPtr.Zero))
                 {
                     return;
                 }
@@ -115,11 +122,30 @@ namespace MultiSpideyWinForms
 
             Invoke(new Action(() =>
             {
-                _spideyWindow = WindowManager.AttachSpideyWindow(handle, hostPanel.Handle);
+                var chosenHandle = IntPtr.Zero;
+                foreach (var handle in handles)
+                {
+                    var result = MessageBox.Show("Connect to SPIDEY#" + handle.ToString() + "?", "DOSBox found", MessageBoxButtons.YesNo);
+                    if (result == DialogResult.Yes)
+                    {
+                        chosenHandle = handle;
+                        break;
+                    }
+                }
+
+                if (chosenHandle == IntPtr.Zero)
+                {
+                    btnRescan.Enabled = true;
+                    SetLoadStatus(LoadStatus.NotStarted);
+                    return;
+                }
+
+                //_spideyWindow = WindowManager.AttachSpideyWindow(handle, hostPanel.Handle);
+                _spideyWindow = WindowManager.GetSpideyWindow(chosenHandle);
                 // Make panel big enough for spidey window. Must be done after
                 // attaching window otherwise it will have the incorrect size
                 // in high DPI displays
-                hostPanel.Size = new Size(_spideyWindow.BorderlessWidth, _spideyWindow.BorderlessHeight);
+                //hostPanel.Size = new Size(_spideyWindow.BorderlessWidth, _spideyWindow.BorderlessHeight);
                 SetLoadStatus(LoadStatus.WaitingForPlayer);
 
                 lock (_timerLock)
@@ -157,13 +183,17 @@ namespace MultiSpideyWinForms
         {
             switch (loadStatus)
             {
+                case LoadStatus.NotStarted:
+                    statusStrip.BackColor = Color.Wheat;
+                    lblLoadStatus.Text = "Not started";
+                    break;
                 case LoadStatus.WaitingForDosbox:
                     statusStrip.BackColor = Color.Red;
                     lblLoadStatus.Text = "Waiting for DOSBox to load...";
                     break;
                 case LoadStatus.WaitingForPlayer:
                     statusStrip.BackColor = Color.Orange;
-                    lblLoadStatus.Text = "DOSBox captured, scanning for player...";
+                    lblLoadStatus.Text = "DOSBox found, setting up memory...";
                     break;
                 case LoadStatus.Ready:
                     statusStrip.BackColor = Color.LightGreen;
@@ -172,17 +202,16 @@ namespace MultiSpideyWinForms
             }
         }
         
-        // TODO - sometimes the border shows up, figure out how to reproduce and fix it
         protected override void OnMove(EventArgs e)
         {
-            WindowManager.UpdateSpideyWindow(_spideyWindow);
+            //WindowManager.UpdateSpideyWindow(_spideyWindow);
             Invalidate();
             base.OnMove(e);
         }
 
         protected override void OnResize(EventArgs e)
         {
-            WindowManager.UpdateSpideyWindow(_spideyWindow);
+            //WindowManager.UpdateSpideyWindow(_spideyWindow);
             Invalidate();
             base.OnResize(e);
         }
@@ -191,7 +220,7 @@ namespace MultiSpideyWinForms
         {
             StopStartupTimer();
             _requestTimerStop = true;
-            WindowManager.DetachSpideyWindow(_spideyWindow);
+            //WindowManager.DetachSpideyWindow(_spideyWindow);
             _spideyWindow = null;
 
             base.OnHandleDestroyed(e);
@@ -200,7 +229,7 @@ namespace MultiSpideyWinForms
         private void btnReset_Click(object sender, EventArgs e)
         {
             StopStartupTimer();
-            WindowManager.DetachSpideyWindow(_spideyWindow);
+            //WindowManager.DetachSpideyWindow(_spideyWindow);
             _spideyWindow = null;
             StartStartupTimer();
         }
@@ -237,7 +266,7 @@ namespace MultiSpideyWinForms
 
             var myInfo = new byte[31];
             myInfo[0] = (byte)playerNumber;
-            var spideyBuffer = MemoryScanner.ReadSpideyPosition();
+            var spideyBuffer = MemoryScanner.ReadSpideyInfo();
             var location = MemoryScanner.ReadLevelTitle();
 
             Buffer.BlockCopy(spideyBuffer, 0, myInfo, 1, spideyBuffer.Length);

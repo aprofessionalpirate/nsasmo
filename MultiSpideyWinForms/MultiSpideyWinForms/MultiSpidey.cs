@@ -11,12 +11,10 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Timer = System.Threading.Timer;
 
-// TTD
-// Rewrite this class to properly do UDP connections
-// Fix workaround for getting width/height
-// Use SetWindowPos instead of MoveWindow
+// TODO
+// Properly reset on reset all
+// Handle player disconnection
 // Interpolation of player position
-// Sometimes the border shows up on spidey window, figure out how to reproduce (something to do with moving the windows) and fix it
 
 namespace MultiSpideyWinForms
 {
@@ -30,6 +28,8 @@ namespace MultiSpideyWinForms
 
     public partial class MultiSpidey : Form
     {
+        public const string START_GAME = "STARTTHEGAMEALREADY";
+
         private readonly object infoLock = new object();
         private readonly object _timerLock = new object();
 
@@ -38,13 +38,19 @@ namespace MultiSpideyWinForms
         private SpideyWindow _spideyWindow;
         private Timer _startupTimer = null;
 
+        private SpideyTcpServer _tcpServer;
+        private SpideyTcpClient _tcpClient;
+        private ConnectedPlayerInformation _myInfo;
+
+        private bool _isHost = false;
+
+
+
         private volatile bool _requestTimerStop = false;
         private Timer memoryTimer;
         private UdpClient udpClient;
 
         private SemaphoreSlim signalToStartHosting = new SemaphoreSlim(0, 1);
-        private volatile bool serverStarted = false;
-        private IPAddress serverIp;
 
         private int playerNumber = 1;
         private int players = 1;
@@ -55,8 +61,6 @@ namespace MultiSpideyWinForms
         private string player2Name = "Player 2";
         private string player3Name = "Player 3";
         private string MyLocation = "";
-
-        private const string Start = "STARTTHEGAMEALREADY";
 
         public MultiSpidey()
         {
@@ -140,12 +144,7 @@ namespace MultiSpideyWinForms
                     return;
                 }
 
-                //_spideyWindow = WindowManager.AttachSpideyWindow(handle, hostPanel.Handle);
                 _spideyWindow = WindowManager.GetSpideyWindow(chosenHandle);
-                // Make panel big enough for spidey window. Must be done after
-                // attaching window otherwise it will have the incorrect size
-                // in high DPI displays
-                //hostPanel.Size = new Size(_spideyWindow.BorderlessWidth, _spideyWindow.BorderlessHeight);
                 SetLoadStatus(LoadStatus.WaitingForPlayer);
 
                 lock (_timerLock)
@@ -201,26 +200,11 @@ namespace MultiSpideyWinForms
                     break;
             }
         }
-        
-        protected override void OnMove(EventArgs e)
-        {
-            //WindowManager.UpdateSpideyWindow(_spideyWindow);
-            Invalidate();
-            base.OnMove(e);
-        }
-
-        protected override void OnResize(EventArgs e)
-        {
-            //WindowManager.UpdateSpideyWindow(_spideyWindow);
-            Invalidate();
-            base.OnResize(e);
-        }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
             StopStartupTimer();
             _requestTimerStop = true;
-            //WindowManager.DetachSpideyWindow(_spideyWindow);
             _spideyWindow = null;
 
             base.OnHandleDestroyed(e);
@@ -228,32 +212,82 @@ namespace MultiSpideyWinForms
 
         private void btnReset_Click(object sender, EventArgs e)
         {
+            _isHost = false;
             StopStartupTimer();
-            //WindowManager.DetachSpideyWindow(_spideyWindow);
             _spideyWindow = null;
             StartStartupTimer();
         }
 
         private void btnHost_Click(object sender, EventArgs e)
         {
-            if (!GetName())
+            if (!ValidNameEntered(out string name))
+                return;
+            if (!ValidPortEntered(out ushort port))
                 return;
 
-            playerNumber = 1;
-            player1Name = txtName.Text;
-            lblPlayer1Name.ForeColor = Color.Red;
-            lblPlayer1Name.Text = player1Name;
+            _myInfo = new ConnectedPlayerInformation(1, name);
+            OnTcpPlayerConnected(_myInfo);
+
+            _isHost = true;
             btnHost.Enabled = false;
             btnJoin.Enabled = false;
             txtIP.Enabled = false;
             txtName.Enabled = false;
 
-            var canStart = new Progress<bool>(s =>
+            _tcpServer = new SpideyTcpServer(port);
+            var onConnected = new Progress<ConnectedPlayerInformation>(OnTcpPlayerConnected);
+
+            _tcpServer.Start(onConnected, _myInfo.Name);
+        }
+
+        private void btnJoin_Click(object sender, EventArgs e)
+        {
+            if (!ValidNameEntered(out string name))
+                return;
+            if (!ValidIpEntered(out IPAddress serverIp))
+                return;
+            if (!ValidPortEntered(out ushort port))
+                return;
+
+            _myInfo = new ConnectedPlayerInformation(0, name);
+
+            btnHost.Enabled = false;
+            btnJoin.Enabled = false;
+            txtIP.Enabled = false;
+            txtName.Enabled = false;
+
+            _tcpClient = new SpideyTcpClient(serverIp, port);
+            var onReceivePlayerNumber = new Progress<int>(OnReceivePlayerNumber);
+            var onConnected = new Progress<ConnectedPlayerInformation>(OnTcpPlayerConnected);
+            var onServerStarted = new Progress<bool>(OnServerStarted);
+            _tcpClient.Start(onReceivePlayerNumber, onConnected, onServerStarted, name);
+        }
+
+        private void OnReceivePlayerNumber(int myPlayerNumber)
+        {
+            _myInfo = new ConnectedPlayerInformation(myPlayerNumber, _myInfo.Name);
+        }
+
+        private void OnTcpPlayerConnected(ConnectedPlayerInformation connectedPlayerInfo)
+        {
+            var displayInfo = new ListViewItem(new[] { connectedPlayerInfo.Name, "Not started" });
+            displayInfo.Tag = connectedPlayerInfo.Number;
+            lstPlayers.Items.Add(displayInfo);
+            if (_isHost && lstPlayers.Items.Count > 1)
             {
                 btnStart.Enabled = true;
-            }) as IProgress<bool>;
+            }
+        }
 
-            Task.Run(() => ServerTask(canStart));
+        private void OnServerStarted(bool started)
+        {
+            /*
+            var udpClient = new UdpClient();
+            udpClient.Client.ReceiveTimeout = 5000;
+            udpClient.Connect(serverIp, Port);
+            memoryTimer = new Timer(ReadFromMemory);
+            memoryTimer.Change(0, Timeout.Infinite);
+            */
         }
 
         private void ReadFromMemory(object state)
@@ -327,7 +361,7 @@ namespace MultiSpideyWinForms
             {
 
             }
-
+            /*
             var playerLabel = lblPlayer1Loc;
             if (playerNumber == 2)
             {
@@ -341,207 +375,15 @@ namespace MultiSpideyWinForms
             playerLabel.BeginInvoke(new Action(() =>
             {
                 playerLabel.Text = levelTitle.ToString();
-            }));
+            }));*/
 
             memoryTimer.Change(100, Timeout.Infinite);
         }
 
-        private async Task ServerTask(IProgress<bool> canStart)
+        private bool ValidNameEntered(out string name)
         {
-            try
-            {
-                var cancellation = new CancellationTokenSource();
-                var connectionTask = Task.Run(() => HandleNewConnections(canStart, cancellation));
-                                
-                // Wait for signal here to start the game
-                await signalToStartHosting.WaitAsync();
-                
-                cancellation.Cancel();
-                await connectionTask;
-            }
-            catch (Exception ex)
-            {
-                Invoke(new Action(() => { MessageBox.Show(ex.Message); }));
-            }
-        }
-
-        private async Task HandleNewConnections(IProgress<bool> canStart, CancellationTokenSource cancellation)
-        {
-            var tcpServer = new TcpListener(IPAddress.Any, Port);
-            var tcpClients = new List<TcpClientWithName>();
-
-            try
-            {
-                tcpServer.Start();
-                var playerCounter = 1;
-                while (!cancellation.IsCancellationRequested)
-                {
-                    var client = await tcpServer.AcceptTcpClientAsync().WithWaitCancellation(cancellation.Token);
-                    if (cancellation.IsCancellationRequested)
-                        break;
-                    if (client == null)
-                        continue;
-
-                    canStart.Report(true);
-                    playerCounter++;
-
-                    var clientWithName = new TcpClientWithName();
-
-                    var reader = new StreamReader(client.GetStream());
-                    var writer = new StreamWriter(client.GetStream());
-
-                    clientWithName.Client = client;
-                    clientWithName.Reader = reader;
-                    clientWithName.Writer = writer;
-
-                    var clientName = reader.ReadLine();
-                    clientWithName.PlayerNumber = playerCounter;
-                    clientWithName.Name = clientName;
-
-                    if (playerCounter == 2)
-                    {
-                        players = 2;
-                        player2Name = clientName;
-                        Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; }));
-                    }
-                    else if (playerCounter == 3)
-                    {
-                        players = 3;
-                        player3Name = clientName;
-                        Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; }));
-                    }
-
-                    writer.WriteLine(playerCounter.ToString());
-                    writer.WriteLine(player1Name);
-
-                    foreach (var tcpClient in tcpClients)
-                    {
-                        writer.WriteLine(tcpClient.PlayerNumber);
-                        writer.WriteLine(tcpClient.Name);
-                        tcpClient.Writer.WriteLine(playerCounter);
-                        tcpClient.Writer.WriteLine(clientName);
-                        tcpClient.Writer.Flush();
-                    }
-                    writer.Flush();
-
-                    tcpClients.Add(clientWithName);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Invoke(new Action(() => { MessageBox.Show(ex.Message); }));
-            }
-            finally
-            {
-                if (serverStarted)
-                {
-                    foreach (var tcpClient in tcpClients)
-                    {
-                        tcpClient.Writer.WriteLine(Start);
-                        tcpClient.Writer.Flush();
-                    }
-                }
-                foreach (var tcpClient in tcpClients)
-                {
-                    tcpClient.Reader.Close();
-                    tcpClient.Writer.Close();
-                    tcpClient.Client.Close();
-                }
-                tcpServer.Stop();
-            }
-        }
-
-        private void btnJoin_Click(object sender, EventArgs e)
-        {
-            if (!GetName())
-                return;
-
-            if (!GetIp())
-                return;
-
-            btnHost.Enabled = false;
-            btnJoin.Enabled = false;
-            txtIP.Enabled = false;
-            txtName.Enabled = false;
-
-            var myName = txtName.Text;
-
-            var serverStartedSignal = new Progress<bool>(s =>
-            {
-                udpClient = new UdpClient();
-                udpClient.Client.ReceiveTimeout = 5000;
-                udpClient.Connect(serverIp, Port);
-                memoryTimer = new Timer(ReadFromMemory);
-                memoryTimer.Change(0, Timeout.Infinite);
-            }) as IProgress<bool>;
-
-            Task.Run(() => ClientTask(myName, serverStartedSignal));
-        }
-
-        private async Task ClientTask(string myName, IProgress<bool> serverStartedSignal)
-        {
-            var tcpClient = new TcpClient();
-            try
-            {
-                await tcpClient.ConnectAsync(serverIp, Port);
-                using (var reader = new StreamReader(tcpClient.GetStream()))
-                {
-                    using (var writer = new StreamWriter(tcpClient.GetStream()))
-                    {
-                        writer.WriteLine(myName);
-                        writer.Flush();
-                        playerNumber = int.Parse(reader.ReadLine());
-                        player1Name = reader.ReadLine();
-                        Invoke(new Action(() => { lblPlayer1Name.Text = player1Name; }));
-
-                        if (playerNumber == 2)
-                        {
-                            player2Name = myName;
-                            Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; lblPlayer2Name.ForeColor = Color.Red; }));
-                        }
-                        else if (playerNumber == 3)
-                        {
-                            player3Name = myName;
-                            Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; lblPlayer3Name.ForeColor = Color.Red; }));
-                        }
-                        
-                        while (!serverStarted)
-                        {
-                            var nextInstruction = await reader.ReadLineAsync();
-                            if (nextInstruction == Start)
-                                serverStarted = true;
-                            else if (nextInstruction == "2")
-                            {
-                                player2Name = reader.ReadLine();
-                                Invoke(new Action(() => { lblPlayer2Name.Text = player2Name; }));
-                            }
-                            else if (nextInstruction == "3")
-                            {
-                                player3Name = reader.ReadLine();
-                                Invoke(new Action(() => { lblPlayer3Name.Text = player3Name; }));
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Invoke(new Action(() => { MessageBox.Show(ex.Message); }));
-            }
-            finally
-            {
-                tcpClient.Close();
-                if (serverStarted)
-                    serverStartedSignal.Report(true);
-            }
-        }
-
-        private bool GetName()
-        {
-            if (string.IsNullOrEmpty(txtName.Text))
+            name = txtName.Text;
+            if (string.IsNullOrEmpty(name))
             {
                 MessageBox.Show("Please enter a name");
                 return false;
@@ -549,10 +391,22 @@ namespace MultiSpideyWinForms
             return true;
         }
 
-        private bool GetIp()
+        private bool ValidPortEntered(out ushort port)
+        {
+            if (string.IsNullOrEmpty(txtPort.Text) || !ushort.TryParse(txtPort.Text, out port))
+            {
+                port = 0;
+                MessageBox.Show("Please enter a valid port");
+                return false;
+            }
+            return true;
+        }
+
+        private bool ValidIpEntered(out IPAddress serverIp)
         {
             if (string.IsNullOrEmpty(txtIP.Text) || !IPAddress.TryParse(txtIP.Text, out serverIp))
             {
+                serverIp = IPAddress.None;
                 MessageBox.Show("Please enter a valid IP");
                 return false;
             }
@@ -561,7 +415,6 @@ namespace MultiSpideyWinForms
 
         private void btnStart_Click(object sender, EventArgs e)
         {
-            serverStarted = true;
             udpClient = new UdpClient(new IPEndPoint(IPAddress.Any, Port));
             signalToStartHosting.Release();
 
@@ -574,6 +427,7 @@ namespace MultiSpideyWinForms
 
         private async Task UdpServerTask()
         {
+            /*
             while (serverStarted)
             {
                 var result = await udpClient.ReceiveAsync();
@@ -611,11 +465,12 @@ namespace MultiSpideyWinForms
                         udpClient.Send(infoToSend, infoToSend.Length, result.RemoteEndPoint);
                     }
                 }
-            }
+            }*/
         }
 
         private void SetPlayerPosition(int clientPlayerNumber, byte[] position, byte[] location)
         {
+            /*
             var playerBox = player2Sprite;
             var playerLabel = lblPlayer1Loc;
             
@@ -679,28 +534,7 @@ namespace MultiSpideyWinForms
             playerLabel.BeginInvoke(new Action(() =>
             {
                 playerLabel.Text = levelTitle.ToString();
-            }));
+            }));*/
         }
-
-        /*
-        private void OldHost()
-        {
-            CancellationTokenSource tsHost;
-            tsHost = new CancellationTokenSource();
-            CancellationToken ct = tsHost.Token;
-            Task.Run(() =>
-            {
-                UdpClient udpServer = new UdpClient(6102);
-
-                while (true)
-                {
-                    var remoteEP = new IPEndPoint(IPAddress.Any, 6102);
-                    var data = udpServer.Receive(ref remoteEP);
-                    if (ct.IsCancellationRequested)
-                        break;
-                    udpServer.Send(new byte[] { 1 }, 1, remoteEP);
-                }
-            }, ct);
-        }*/
     }
 }

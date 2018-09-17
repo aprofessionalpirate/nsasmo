@@ -26,8 +26,8 @@ namespace MultiSpideyWinForms
         private const string MARY_JANE_IS_DEAD = "4D617279204A616E65206973204445414421";
         private const string CREDITS = "4D7973746572696F202020202020202020202020202020204A2E4A6F6E6168204A616D65736F6E20202020202020202043686565736563616B652020202020202020202020202020456C76696520202020202020202020202020202020202020436F6C696E20202020202020202020202020202020202020466C6173682054686F6D70736F6E202020202020202020204A6F6520526F62657274736F6E2020202020202020202020444D502020202020202020202020202020202020202020204B69636B6168612074686520547269636B737465722020205357472020202020202020202020202020202020202020204B52412020202020202020202020202020202020202020204368616D706965202020202020202020202020202020202052696B2020202020202020202020202020202020202020204D617279204A616E652020202020202020202020202020205065746572205061726B657220202020202020202020202041756E74204D6179";
 
-        private const int PLAYER_INFO_SIZE = 48;
-        private const int LEVEL_INFO_SIZE = 24;
+        public const int SPIDEY_DATA_SIZE = 48;
+        public const int LOCATION_DATA_SIZE = 24;
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -251,30 +251,30 @@ namespace MultiSpideyWinForms
             }
         }
 
-        public static byte[] ReadSpideyInfo()
+        public static byte[] ReadSpideyData()
         {
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var spideyAddress = Interlocked.Read(ref _spideyAddress);
 
-            var spideyBuffer = new byte[PLAYER_INFO_SIZE];
+            var spideyBuffer = new byte[SPIDEY_DATA_SIZE];
             if (spideyAddress != 0)
             {
                 int bytesRead = 0;
-                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(spideyAddress), spideyBuffer, PLAYER_INFO_SIZE, ref bytesRead);
+                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(spideyAddress), spideyBuffer, SPIDEY_DATA_SIZE, ref bytesRead);
             }
             return spideyBuffer;
         }
 
-        public static byte[] ReadLevelTitle()
+        public static byte[] ReadLocationData()
         {
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var levelAddress = Interlocked.Read(ref _levelAddress);
 
-            var levelBuffer = new byte[LEVEL_INFO_SIZE];
+            var levelBuffer = new byte[LOCATION_DATA_SIZE];
             if (levelAddress != 0)
             {
                 int bytesRead = 0;
-                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(levelAddress), levelBuffer, LEVEL_INFO_SIZE, ref bytesRead);
+                ReadProcessMemory(Convert.ToInt32(dosBoxProcess), Convert.ToInt32(levelAddress), levelBuffer, LOCATION_DATA_SIZE, ref bytesRead);
             }
 
             return levelBuffer;

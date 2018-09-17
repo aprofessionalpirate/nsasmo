@@ -92,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ConnectedPlayerInformation.cs" />
+    <Compile Include="ConnectedPlayerUdpEndPoint.cs" />
     <Compile Include="ConnectionManager.cs" />
     <Compile Include="MemoryScanner.cs" />
     <Compile Include="MultiSpidey.cs">
@@ -102,7 +103,12 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SpideyUdpMessage.cs" />
     <Compile Include="SpideyTcpClient.cs" />
+    <Compile Include="SpideyTcpMessage.cs" />
+    <Compile Include="SpideyUdpBase.cs" />
+    <Compile Include="SpideyUdpClient.cs" />
+    <Compile Include="SpideyUdpServer.cs" />
     <Compile Include="SpideyWindow.cs" />
     <Compile Include="TaskExtensions.cs" />
     <Compile Include="TcpConnectedPlayer.cs" />

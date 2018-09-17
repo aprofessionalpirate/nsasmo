@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -21,11 +22,11 @@ namespace MultiSpideyWinForms
             _port = port;
         }
 
-        public void Start(IProgress<int> onReceivePlayerNumber, IProgress<ConnectedPlayerInformation> onConnected, IProgress<bool> onServerStarted, string myName)
+        public void Start(SpideyUdpClient udpClient, IProgress<byte> onReceivePlayerNumber, IProgress<ConnectedPlayerInformation> onConnected, IProgress<bool> onServerStarted, IProgress<ConnectedPlayerUdpEndPoint> onReceiveUdpInfo, string myName)
         {
             if (IsClientTaskStopped())
             {
-                var lTask = new Task<Task>(async () => await ConnectToServer(onReceivePlayerNumber, onConnected, onServerStarted, myName));
+                var lTask = new Task<Task>(async () => await ConnectToServer(udpClient, onReceivePlayerNumber, onConnected, onServerStarted, onReceiveUdpInfo, myName));
                 _clientTask = lTask.Unwrap();
                 //_serverTask.ObserveExceptions();
                 _clientTaskCancellationToken = new CancellationTokenSource();
@@ -38,19 +39,20 @@ namespace MultiSpideyWinForms
             return _clientTask == null || _clientTask.IsCompleted;
         }
 
-        public async Task Stop()
+        public void Stop()
         {
             if (_clientTask != null)
             {
                 _clientTaskCancellationToken.Cancel();
-                await _clientTask;
+                _clientTask.Wait();
             }
         }
 
-        private async Task ConnectToServer(IProgress<int> onReceivePlayerNumber, IProgress<ConnectedPlayerInformation> onConnected, IProgress<bool> onServerStarted, string myName)
+        private async Task ConnectToServer(SpideyUdpClient udpClient, IProgress<byte> onReceivePlayerNumber, IProgress<ConnectedPlayerInformation> onConnected, IProgress<bool> onServerStarted, IProgress<ConnectedPlayerUdpEndPoint> onReceiveUdpInfo, string myName)
         {
             var tcpClient = new TcpClient();
             var serverStarted = false;
+            var mapPlayerEndpoints = new Dictionary<byte, IPEndPoint>();
             try
             {
                 await tcpClient.ConnectAsync(_ipAddress, _port);
@@ -58,32 +60,43 @@ namespace MultiSpideyWinForms
                 {
                     using (var writer = new StreamWriter(tcpClient.GetStream()))
                     {
-                        writer.WriteLine(myName);
-                        writer.Flush();
-                        var hostPlayerNumber = int.Parse(reader.ReadLine());
-                        var hostPlayerName = reader.ReadLine();
-                        var myPlayerNumber = int.Parse(reader.ReadLine());
+                        SpideyTcpMessage.SendSpideySenseMessage(writer, myName);
 
+                        var messageType = Convert.ToByte(reader.ReadLine());
+                        if (messageType != SpideyTcpMessage.TINGLING)
+                        {
+                            return;
+                        }
+                        SpideyTcpMessage.ParseTinglingMessage(reader, out string hostPlayerName, out byte myPlayerNumber);
+
+                        udpClient.UpdatePlayerNumberAndStartClient(myPlayerNumber);
                         onReceivePlayerNumber.Report(myPlayerNumber);
                         onConnected.Report(new ConnectedPlayerInformation(myPlayerNumber, myName));
-                        onConnected.Report(new ConnectedPlayerInformation(hostPlayerNumber, hostPlayerName));
+                        onConnected.Report(new ConnectedPlayerInformation(1, hostPlayerName));
 
                         while (!serverStarted && !_clientTaskCancellationToken.IsCancellationRequested)
                         {
-                            var nextInstruction = await reader.ReadLineAsync();
+                            var nextInstruction = await reader.ReadLineAsync().WithWaitCancellation(_clientTaskCancellationToken.Token);
                             if (nextInstruction == null)
                             {
-                                // Disconnection
+                                // Disconnection or cancellation?
                                 break;
                             }
-                            if (nextInstruction == MultiSpidey.START_GAME)
+                            messageType = Convert.ToByte(nextInstruction);
+                            switch (messageType)
                             {
-                                serverStarted = true;
-                            }
-                            else if (int.TryParse(nextInstruction, out int playerNumber))
-                            {
-                                var playerName = reader.ReadLine();
-                                onConnected.Report(new ConnectedPlayerInformation(playerNumber, playerName));
+                                case SpideyTcpMessage.PLAYER_INFO:
+                                    SpideyTcpMessage.ParsePlayerInfoMessage(reader, out byte otherPlayerNumber, out string otherPlayerName);
+                                    onConnected.Report(new ConnectedPlayerInformation(otherPlayerNumber, otherPlayerName));
+                                    break;
+                                case SpideyTcpMessage.UDP_INFO:
+                                    SpideyTcpMessage.ParseUdpInfoMessage(reader, out byte otherUdpPlayerNumber, out IPEndPoint otherPlayerUdpEndpoint);
+                                    mapPlayerEndpoints.Add(otherUdpPlayerNumber, otherPlayerUdpEndpoint);
+                                    onReceiveUdpInfo.Report(new ConnectedPlayerUdpEndPoint(otherUdpPlayerNumber, new IPEndPoint(otherPlayerUdpEndpoint.Address, otherPlayerUdpEndpoint.Port)));
+                                    break;
+                                case SpideyTcpMessage.START:
+                                    serverStarted = true;
+                                    break;
                             }
                         }
                     }

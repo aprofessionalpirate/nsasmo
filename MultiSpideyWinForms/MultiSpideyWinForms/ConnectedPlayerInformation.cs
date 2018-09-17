@@ -2,12 +2,12 @@
 
 namespace MultiSpideyWinForms
 {
-    public class ConnectedPlayerInformation : Tuple<int, string>
+    public class ConnectedPlayerInformation : Tuple<byte, string>
     {
-        public int Number { get { return Item1; } }
-        public string Name { get { return Item2; } }
+        public byte Number { get { return Item1; } }
+        public string Data { get { return Item2; } }
 
-        public ConnectedPlayerInformation(int number, string name) : base(number, name)
+        public ConnectedPlayerInformation(byte number, string data) : base(number, data)
         {
         }
     }

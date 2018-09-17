@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -12,6 +11,7 @@ using System.Windows.Forms;
 using Timer = System.Threading.Timer;
 
 // TODO
+// UDP hole punching
 // Properly reset on reset all
 // Handle player disconnection
 // Interpolation of player position
@@ -28,42 +28,33 @@ namespace MultiSpideyWinForms
 
     public partial class MultiSpidey : Form
     {
-        public const string START_GAME = "STARTTHEGAMEALREADY";
-
-        private readonly object infoLock = new object();
-        private readonly object _timerLock = new object();
-
-        private const int Port = 6015;
+        private readonly object _infoLock = new object();
+        private readonly object _startupTimerLock = new object();
+        private readonly object _memoryTimerLock = new object();
 
         private SpideyWindow _spideyWindow;
         private Timer _startupTimer = null;
+        private Timer _memoryTimer = null;
 
         private SpideyTcpServer _tcpServer;
         private SpideyTcpClient _tcpClient;
+        private SpideyUdpServer _udpServer;
+        private SpideyUdpClient _udpClient;
+
         private ConnectedPlayerInformation _myInfo;
+        private IProgress<ConnectedPlayerInformation> _onLocationUpdate;
 
         private bool _isHost = false;
-
-
-
-        private volatile bool _requestTimerStop = false;
-        private Timer memoryTimer;
-        private UdpClient udpClient;
+        private IPAddress _serverIp;
+        private ushort _port;
 
         private SemaphoreSlim signalToStartHosting = new SemaphoreSlim(0, 1);
 
-        private int playerNumber = 1;
-        private int players = 1;
-        private byte[] player1Info = new byte[30];
-        private byte[] player2Info = new byte[30];
-        private byte[] player3Info = new byte[30];
-        private string player1Name = "Player 1";
-        private string player2Name = "Player 2";
-        private string player3Name = "Player 3";
-        private string MyLocation = "";
+        private List<UdpClient> udpWebSwing = new List<UdpClient>();
 
         public MultiSpidey()
         {
+            _onLocationUpdate = new Progress<ConnectedPlayerInformation>(OnLocationUpdate);
             InitializeComponent();
         }
 
@@ -81,7 +72,7 @@ namespace MultiSpideyWinForms
         {
             btnRescan.Enabled = false;
             SetLoadStatus(LoadStatus.WaitingForDosbox);
-            lock (_timerLock)
+            lock (_startupTimerLock)
             {
                 _startupTimer = new Timer(AttachToDosbox);
                 _startupTimer.Change(0, 1000);
@@ -90,7 +81,7 @@ namespace MultiSpideyWinForms
 
         private void StopStartupTimer()
         {
-            lock (_timerLock)
+            lock (_startupTimerLock)
             {
                 if (_startupTimer != null)
                 {
@@ -110,7 +101,7 @@ namespace MultiSpideyWinForms
         private void AttachToDosbox(object state)
         {
             IEnumerable<IntPtr> handles;
-            lock (_timerLock)
+            lock (_startupTimerLock)
             {
                 var timer = state as Timer;
                 if (timer != _startupTimer || _startupTimer == null) return;
@@ -147,7 +138,7 @@ namespace MultiSpideyWinForms
                 _spideyWindow = WindowManager.GetSpideyWindow(chosenHandle);
                 SetLoadStatus(LoadStatus.WaitingForPlayer);
 
-                lock (_timerLock)
+                lock (_startupTimerLock)
                 {
                     _startupTimer = new Timer(FindPlayerInMemory);
                     _startupTimer.Change(0, 1000);
@@ -157,7 +148,7 @@ namespace MultiSpideyWinForms
 
         private void FindPlayerInMemory(object state)
         {
-            lock (_timerLock)
+            lock (_startupTimerLock)
             {
                 var timer = state as Timer;
                 if (timer != _startupTimer || _startupTimer == null) return;
@@ -204,8 +195,14 @@ namespace MultiSpideyWinForms
         protected override void OnHandleDestroyed(EventArgs e)
         {
             StopStartupTimer();
-            _requestTimerStop = true;
+            StopMemoryTimer();
             _spideyWindow = null;
+            // TODO - figure out why I can't just call .Wait() here and await inside Stop()
+            // It seems to wait forever even though the task completes
+            if (_udpClient != null) _udpClient.Stop();
+            if (_udpServer != null) _udpServer.Stop();
+            if (_tcpClient != null) _tcpClient.Stop();
+            if (_tcpServer != null) _tcpServer.Stop();
 
             base.OnHandleDestroyed(e);
         }
@@ -214,6 +211,7 @@ namespace MultiSpideyWinForms
         {
             _isHost = false;
             StopStartupTimer();
+            StopMemoryTimer();
             _spideyWindow = null;
             StartStartupTimer();
         }
@@ -222,7 +220,7 @@ namespace MultiSpideyWinForms
         {
             if (!ValidNameEntered(out string name))
                 return;
-            if (!ValidPortEntered(out ushort port))
+            if (!ValidPortEntered(out _port))
                 return;
 
             _myInfo = new ConnectedPlayerInformation(1, name);
@@ -234,19 +232,22 @@ namespace MultiSpideyWinForms
             txtIP.Enabled = false;
             txtName.Enabled = false;
 
-            _tcpServer = new SpideyTcpServer(port);
+            _tcpServer = new SpideyTcpServer(_port);
             var onConnected = new Progress<ConnectedPlayerInformation>(OnTcpPlayerConnected);
+            _tcpServer.Start(onConnected, _myInfo.Data);
 
-            _tcpServer.Start(onConnected, _myInfo.Name);
+            _udpServer = new SpideyUdpServer(_port);
+            var onReceiveUdpInfo = new Progress<ConnectedPlayerUdpEndPoint>(OnReceiveUdpInfo);
+            _udpServer.Start(_tcpServer, _onLocationUpdate, onReceiveUdpInfo);
         }
 
         private void btnJoin_Click(object sender, EventArgs e)
         {
             if (!ValidNameEntered(out string name))
                 return;
-            if (!ValidIpEntered(out IPAddress serverIp))
+            if (!ValidIpEntered(out _serverIp))
                 return;
-            if (!ValidPortEntered(out ushort port))
+            if (!ValidPortEntered(out _port))
                 return;
 
             _myInfo = new ConnectedPlayerInformation(0, name);
@@ -256,128 +257,46 @@ namespace MultiSpideyWinForms
             txtIP.Enabled = false;
             txtName.Enabled = false;
 
-            _tcpClient = new SpideyTcpClient(serverIp, port);
-            var onReceivePlayerNumber = new Progress<int>(OnReceivePlayerNumber);
+            _udpClient = new SpideyUdpClient(_serverIp, _port);
+            var onUdpClientConnected = new Progress<bool>(OnUdpClientConnected);
+            _udpClient.Start(onUdpClientConnected, _onLocationUpdate);
+
+            _tcpClient = new SpideyTcpClient(_serverIp, _port);
+            var onReceivePlayerNumber = new Progress<byte>(OnReceivePlayerNumber);
             var onConnected = new Progress<ConnectedPlayerInformation>(OnTcpPlayerConnected);
             var onServerStarted = new Progress<bool>(OnServerStarted);
-            _tcpClient.Start(onReceivePlayerNumber, onConnected, onServerStarted, name);
+            var onReceiveUdpInfo = new Progress<ConnectedPlayerUdpEndPoint>(OnReceiveUdpInfo);
+            _tcpClient.Start(_udpClient, onReceivePlayerNumber, onConnected, onServerStarted, onReceiveUdpInfo, name);
+
+            OnReceiveUdpInfo(new ConnectedPlayerUdpEndPoint(1, new IPEndPoint(_serverIp, _port)));
         }
 
-        private void OnReceivePlayerNumber(int myPlayerNumber)
+        private void OnUdpClientConnected(bool connected)
         {
-            _myInfo = new ConnectedPlayerInformation(myPlayerNumber, _myInfo.Name);
+            // TODO?
+        }
+
+        private void OnReceivePlayerNumber(byte myPlayerNumber)
+        {
+            _myInfo = new ConnectedPlayerInformation(myPlayerNumber, _myInfo.Data);
+        }
+
+        private void OnReceiveUdpInfo(ConnectedPlayerUdpEndPoint playerUdpInfo)
+        {
+            var udpClient = new UdpClient();
+            udpClient.Connect(playerUdpInfo.EndPoint);
+            udpWebSwing.Add(udpClient);
         }
 
         private void OnTcpPlayerConnected(ConnectedPlayerInformation connectedPlayerInfo)
         {
-            var displayInfo = new ListViewItem(new[] { connectedPlayerInfo.Name, "Not started" });
+            var displayInfo = new ListViewItem(new[] { connectedPlayerInfo.Data, "Not started" });
             displayInfo.Tag = connectedPlayerInfo.Number;
             lstPlayers.Items.Add(displayInfo);
             if (_isHost && lstPlayers.Items.Count > 1)
             {
                 btnStart.Enabled = true;
             }
-        }
-
-        private void OnServerStarted(bool started)
-        {
-            /*
-            var udpClient = new UdpClient();
-            udpClient.Client.ReceiveTimeout = 5000;
-            udpClient.Connect(serverIp, Port);
-            memoryTimer = new Timer(ReadFromMemory);
-            memoryTimer.Change(0, Timeout.Infinite);
-            */
-        }
-
-        private void ReadFromMemory(object state)
-        {
-            if (_requestTimerStop)
-            {
-                memoryTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                return;
-            }
-
-            var myInfo = new byte[31];
-            myInfo[0] = (byte)playerNumber;
-            var spideyBuffer = MemoryScanner.ReadSpideyInfo();
-            var location = MemoryScanner.ReadLevelTitle();
-
-            Buffer.BlockCopy(spideyBuffer, 0, myInfo, 1, spideyBuffer.Length);
-            Buffer.BlockCopy(location, 0, myInfo, spideyBuffer.Length + 1, location.Length);
-            
-            var levelTitle = new StringBuilder();
-
-            for (int i = 0; i < 24; i++)
-            {
-                levelTitle.Append((char)location[i]);
-            }
-
-            try
-            {
-                lock (infoLock)
-                {
-                    if (playerNumber == 1)
-                    {
-                        player1Info = myInfo;
-                    }
-                    else if (playerNumber == 2)
-                    {
-                        player2Info = myInfo;
-                        udpClient.Send(player2Info, player2Info.Length);
-                    }
-                    else if (playerNumber == 3)
-                    {
-                        player3Info = myInfo;
-                        udpClient.Send(player3Info, player3Info.Length);
-                    }
-
-                    if (playerNumber >= 2)
-                    {
-                        var ipEndPoint = new IPEndPoint(IPAddress.Any, Port);
-                        var result = udpClient.Receive(ref ipEndPoint);
-                        if (result.Length >= 31)
-                        {
-                            var clientPlayerNumber = (int)result[0];
-
-                            var clientPosition = result.Skip(1).Take(6).ToArray();
-                            var clientLocation = result.Skip(7).Take(24).ToArray();
-                            SetPlayerPosition(clientPlayerNumber, clientPosition, clientLocation);
-                            if (result.Length == 62)
-                            {
-                                clientPlayerNumber = (int)result[31];
-
-                                clientPosition = result.Skip(32).Take(6).ToArray();
-                                clientLocation = result.Skip(38).Take(24).ToArray();
-                                SetPlayerPosition(clientPlayerNumber, clientPosition, clientLocation);
-                            }
-                        }
-                    }
-
-                    MyLocation = levelTitle.ToString();
-                }
-            }
-            catch (Exception ex)
-            {
-
-            }
-            /*
-            var playerLabel = lblPlayer1Loc;
-            if (playerNumber == 2)
-            {
-                playerLabel = lblPlayer2Loc;
-            }
-            else if (playerNumber == 3)
-            {
-                playerLabel = lblPlayer3Loc;
-            }
-
-            playerLabel.BeginInvoke(new Action(() =>
-            {
-                playerLabel.Text = levelTitle.ToString();
-            }));*/
-
-            memoryTimer.Change(100, Timeout.Infinite);
         }
 
         private bool ValidNameEntered(out string name)
@@ -413,59 +332,89 @@ namespace MultiSpideyWinForms
             return true;
         }
 
-        private void btnStart_Click(object sender, EventArgs e)
+        private async void btnStart_Click(object sender, EventArgs e)
         {
-            udpClient = new UdpClient(new IPEndPoint(IPAddress.Any, Port));
-            signalToStartHosting.Release();
-
-            Task.Run(UdpServerTask);
-
             btnStart.Enabled = false;
-            memoryTimer = new Timer(ReadFromMemory);
-            memoryTimer.Change(0, Timeout.Infinite);
+
+            await _tcpServer.StartGame();
+
+            StartMemoryTimer();
         }
 
-        private async Task UdpServerTask()
+        private void OnServerStarted(bool started)
         {
-            /*
-            while (serverStarted)
+            if (!started) return;
+
+            _udpClient.StartGame();
+            StartMemoryTimer();
+        }
+
+        private void OnLocationUpdate(ConnectedPlayerInformation connectedPlayerInfo)
+        {
+            try
             {
-                var result = await udpClient.ReceiveAsync();
-                if (result.Buffer.Length < 31)
-                    continue;
-
-                var clientPlayerNumber = (int)result.Buffer[0];
-
-                var position = result.Buffer.Skip(1).Take(6).ToArray();
-                var location = result.Buffer.Skip(7).Take(24).ToArray();
-
-                SetPlayerPosition(clientPlayerNumber, position, location);
-                
-                if (clientPlayerNumber == 2)
-                    player2Info = result.Buffer;
-                else
-                    player3Info = result.Buffer;
-
-                lock (infoLock)
+                var players = lstPlayers.Items.Cast<ListViewItem>();
+                var player = players.FirstOrDefault(p => Convert.ToInt32(p.Tag) == connectedPlayerInfo.Number);
+                if (player.SubItems[1].Text != connectedPlayerInfo.Data)
                 {
-                    if (players == 2)
-                    {
-                        udpClient.Send(player1Info, player1Info.Length, result.RemoteEndPoint);
-                    }
-                    else if (players == 3)
-                    {
-                        var infoToSend = new byte[62];
-                        Buffer.BlockCopy(player1Info, 0, infoToSend, 0, player1Info.Length);
-
-                        if (clientPlayerNumber == 2)
-                            Buffer.BlockCopy(player3Info, 0, infoToSend, player1Info.Length, player3Info.Length);
-                        else
-                            Buffer.BlockCopy(player2Info, 0, infoToSend, player1Info.Length, player2Info.Length);
-
-                        udpClient.Send(infoToSend, infoToSend.Length, result.RemoteEndPoint);
-                    }
+                    player.SubItems[1].Text = connectedPlayerInfo.Data;
                 }
-            }*/
+            }
+            catch (Exception ex)
+            {
+                // TODO - handle this better, can fail when trying to update when shutting down
+            }
+        }
+
+        private void StartMemoryTimer()
+        {
+            lock (_memoryTimerLock)
+            {
+                _memoryTimer = new Timer(ReadFromMemory);
+                _memoryTimer.Change(0, 15);
+            }
+        }
+
+        private void StopMemoryTimer()
+        {
+            lock (_memoryTimerLock)
+            {
+                if (_memoryTimer != null)
+                {
+                    try
+                    {
+                        _memoryTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
+                    _memoryTimer.Dispose();
+                    _memoryTimer = null;
+                }
+            }
+        }
+
+        private void ReadFromMemory(object state)
+        {
+            string location;
+            lock (_memoryTimerLock)
+            {
+                var timer = state as Timer;
+                if (timer != _memoryTimer || _memoryTimer == null) return;
+
+                var spideyData = MemoryScanner.ReadSpideyData();
+                var locationData = MemoryScanner.ReadLocationData();
+
+                var message = SpideyUdpMessage.CreateSpidermanMessage(_myInfo.Number, spideyData, locationData);
+
+                foreach (var udpClient in udpWebSwing)
+                {
+                    udpClient.Send(message, message.Length);
+                }
+
+                location = SpideyUdpMessage.AsciiEncoding.GetString(locationData).TrimEnd();
+                _onLocationUpdate.Report(new ConnectedPlayerInformation(_myInfo.Number, location));
+            }
         }
 
         private void SetPlayerPosition(int clientPlayerNumber, byte[] position, byte[] location)

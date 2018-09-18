@@ -4,14 +4,11 @@ using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Timer = System.Threading.Timer;
 
 // TODO
-// UDP hole punching
 // Properly reset on reset all
 // Handle player disconnection
 // Interpolation of player position
@@ -40,6 +37,7 @@ namespace MultiSpideyWinForms
         private SpideyTcpClient _tcpClient;
         private SpideyUdpServer _udpServer;
         private SpideyUdpClient _udpClient;
+        private SpideyUdpBase _udpBase;
 
         private ConnectedPlayerInformation _myInfo;
         private IProgress<ConnectedPlayerInformation> _onLocationUpdate;
@@ -237,6 +235,7 @@ namespace MultiSpideyWinForms
             _tcpServer.Start(onConnected, _myInfo.Data);
 
             _udpServer = new SpideyUdpServer(_port);
+            _udpBase = _udpServer;
             var onReceiveUdpInfo = new Progress<ConnectedPlayerUdpEndPoint>(OnReceiveUdpInfo);
             _udpServer.Start(_tcpServer, _onLocationUpdate, onReceiveUdpInfo);
         }
@@ -258,6 +257,7 @@ namespace MultiSpideyWinForms
             txtName.Enabled = false;
 
             _udpClient = new SpideyUdpClient(_serverIp, _port);
+            _udpBase = _udpClient;
             var onUdpClientConnected = new Progress<bool>(OnUdpClientConnected);
             _udpClient.Start(onUdpClientConnected, _onLocationUpdate);
 
@@ -414,76 +414,9 @@ namespace MultiSpideyWinForms
 
                 location = SpideyUdpMessage.AsciiEncoding.GetString(locationData).TrimEnd();
                 _onLocationUpdate.Report(new ConnectedPlayerInformation(_myInfo.Number, location));
-            }
-        }
 
-        private void SetPlayerPosition(int clientPlayerNumber, byte[] position, byte[] location)
-        {
-            /*
-            var playerBox = player2Sprite;
-            var playerLabel = lblPlayer1Loc;
-            
-            if (clientPlayerNumber == 2)
-            {
-                playerLabel = lblPlayer2Loc;
+                _udpBase.MyLastLocation = location;
             }
-            else if (clientPlayerNumber == 3)
-            {
-                playerLabel = lblPlayer3Loc;
-            }
-
-            if ((clientPlayerNumber == 3) || (clientPlayerNumber == 2 && playerNumber == 3))
-            {
-                playerBox = player3Sprite;
-            }
-
-            var left = (int)position[0];
-            var leftScreen = (int)position[1];
-            var right = (int)position[2];
-            var rightScreen = (int)position[3];
-            var top = (int)position[4];
-            var bottom = (int)position[5];
-
-            var spideyLeft = hostPanel.Left + ((left / 255.0) * _spideyWindow.BorderlessWidth * 0.8);
-            var spideyRight = hostPanel.Left + ((right / 255.0) * _spideyWindow.BorderlessWidth * 0.8);
-            var spideyTop = hostPanel.Top + _spideyWindow.BorderlessHeight * 0.12 + ((top / 175.0) * _spideyWindow.BorderlessHeight * 0.88);
-            var spideyBottom = hostPanel.Top + _spideyWindow.BorderlessHeight * 0.12 + ((bottom / 175.0) * _spideyWindow.BorderlessHeight * 0.88);
-            
-            var levelTitle = new StringBuilder();
-
-            for (int i = 0; i < 24; i++)
-            {
-                levelTitle.Append((char)location[i]);
-            }
-
-            var sameLocation = false;
-            lock (infoLock)
-            {
-                sameLocation = MyLocation == levelTitle.ToString();
-            }
-
-            if (sameLocation)
-            {
-                playerBox.BeginInvoke(new Action(() =>
-                {
-                    playerBox.Visible = true;
-                    playerBox.Size = new Size((int)spideyRight - (int)spideyLeft, (int)spideyBottom - (int)spideyTop);
-                    playerBox.Left = (int)spideyLeft;
-                    playerBox.Top = (int)spideyTop;
-                }));
-            }
-            else
-            {
-                playerBox.BeginInvoke(new Action(() =>
-                {
-                    playerBox.Visible = false;
-                }));
-            }
-
-            playerLabel.BeginInvoke(new Action(() =>
-            {
-                playerLabel.Text = levelTitle.ToString();
-            }));*/
         }
     }
 }

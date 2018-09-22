@@ -113,6 +113,7 @@ namespace MultiSpideyWinForms
                     if (!SpideyUdpMessage.ParseSpidermanMessage(message, out playerNumber, out byte[] spideyData, out byte[] locationData))
                         break;
                     onLocationUpdate.Report(new ConnectedPlayerInformation(playerNumber, SpideyUdpMessage.AsciiEncoding.GetString(locationData).TrimEnd()));
+                    MemoryScanner.WriteSpideyData(spideyData);
                     break;
                 default:
                     break;

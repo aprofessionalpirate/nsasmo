@@ -27,6 +27,7 @@ namespace MultiSpideyWinForms
         private const int LEVEL_OFFSET = 1279;
 
         public const int ENEMY_COUNT_DATA_SIZE = 1;
+        public const int ENEMY_HEADER_SIZE = 2;
         public const int SPIDEY_DATA_SIZE = 48;
         public const int LOCATION_DATA_SIZE = 24;
 
@@ -177,7 +178,7 @@ namespace MultiSpideyWinForms
             }
 
             // Open the process with desired access level
-            var dosBoxProcess = OpenProcess(ProcessAccessFlags.QueryInformation | ProcessAccessFlags.VMRead, false, process.Id);
+            var dosBoxProcess = OpenProcess(ProcessAccessFlags.QueryInformation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite, false, process.Id);
 
             long enemyCountAddress = 0;
             long spideyAddress = 0;
@@ -305,16 +306,24 @@ namespace MultiSpideyWinForms
             return levelBuffer;
         }
         
-        public static void WriteSpideyData(bool addSpidey)
+        public static void WriteSpideyData(byte[] spideyData)
         {
-            // TODO - will need a better way to determine if location has changed (e.g. Leo's Maze will have problems)
+            // TODO - will need a way to determine if location has changed (note e.g. Leo's Maze will have problems if just comparing names)
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var enemyCountAddress = Interlocked.Read(ref _enemyCountAddress);
+            var spideyAddress = Interlocked.Read(ref _spideyAddress);
 
-            var levelBuffer = new byte[LOCATION_DATA_SIZE];
             if (enemyCountAddress != 0)
             {
-                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), levelBuffer, LOCATION_DATA_SIZE, out int bytesRead);
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), new byte[] { 3 }, ENEMY_COUNT_DATA_SIZE, out int bytesWritten);
+            }
+            if (spideyAddress != 0)
+            {
+                var playerData = new byte[SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE];
+                playerData[0] = 0xC0;
+                playerData[1] = 0x01;
+                Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out int bytesWritten);
             }
         }
     }

@@ -319,11 +319,18 @@ namespace MultiSpideyWinForms
             }
             if (spideyAddress != 0)
             {
-                var playerData = new byte[SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE];
+                var playerData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
                 playerData[0] = 0xC0;
                 playerData[1] = 0x01;
                 Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
-                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out int bytesWritten);
+                //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out int bytesWritten);
+                
+                // Cutting out half the data seems to fix graphical glitching issues and disables interaction with other player's game
+                // TODO - figure out why and which bytes should actually be sent
+                var cutDownSize = Convert.ToUInt32(ENEMY_HEADER_SIZE + (SPIDEY_DATA_SIZE / 2));
+                var cutDownPlayerData = new byte[cutDownSize];
+                Buffer.BlockCopy(playerData, 0, cutDownPlayerData, 0, Convert.ToInt32(cutDownSize));
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE), cutDownPlayerData, cutDownSize, out int bytesWritten);
             }
         }
     }

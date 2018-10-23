@@ -32,23 +32,30 @@ namespace SpideyCheatParser
                 Thread.Sleep(100);
             }
 
-            MemoryScanner.WriteSpideyXAndYPosition(0x77, 0x77);
-
-            using (var output = new StreamWriter("Levels.txt", false))
+            try
             {
-                for (byte levelNumber = 0x00; levelNumber <= 0x3F; ++levelNumber)
+                MemoryScanner.WriteSpideyXAndYPosition(0x77, 0x77);
+
+                using (var output = new StreamWriter("Levels.txt", false))
                 {
-                    MemoryScanner.WriteSpideyLevelCheatData(levelNumber);
-                    var stopwatch = new Stopwatch();
-                    stopwatch.Start();
-                    while (stopwatch.ElapsedMilliseconds < 500)
+                    for (byte levelNumber = 0x00; levelNumber <= 0x3F; ++levelNumber)
                     {
-                        MemoryScanner.WriteSpideyXAndYPosition(0x77, 0x77);
+                        MemoryScanner.WriteSpideyLevelCheatData(levelNumber);
+                        var stopwatch = new Stopwatch();
+                        stopwatch.Start();
+                        while (stopwatch.ElapsedMilliseconds < 500)
+                        {
+                            MemoryScanner.WriteSpideyXAndYPosition(0x77, 0x77);
+                        }
+                        var name = AsciiEncoding.GetString(MemoryScanner.ReadLocationData());
+                        var enemyCount = MemoryScanner.ReadEnemyCountData();
+                        output.WriteLine(levelNumber.ToString("X2") + "|" + name + "|" + enemyCount.ToString("X2"));
                     }
-                    var name = AsciiEncoding.GetString(MemoryScanner.ReadLocationData());
-                    var enemyCount = MemoryScanner.ReadEnemyCountData();
-                    output.WriteLine(levelNumber.ToString("X2") + "|" + name + "|" + enemyCount.ToString("X2"));
                 }
+            }
+            finally
+            {
+                MemoryScanner.CloseDosBoxHandle();
             }
         }
     }

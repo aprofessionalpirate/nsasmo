@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using System.Windows.Forms;
 
 namespace MultiSpideyWinForms
 {
@@ -295,6 +294,16 @@ namespace MultiSpideyWinForms
             else
             {
                 return false;
+            }
+        }
+
+        public static void CloseDosBoxHandle()
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+
+            if (dosBoxProcess != 0)
+            {
+                CloseHandle(new IntPtr(dosBoxProcess));
             }
         }
 

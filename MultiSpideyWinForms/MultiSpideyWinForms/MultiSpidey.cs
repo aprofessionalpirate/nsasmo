@@ -206,6 +206,8 @@ namespace MultiSpideyWinForms
             if (_tcpClient != null) _tcpClient.Stop();
             if (_tcpServer != null) _tcpServer.Stop();
 
+            MemoryScanner.CloseDosBoxHandle();
+
             base.OnHandleDestroyed(e);
         }
 

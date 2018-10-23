@@ -103,6 +103,8 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SpideyLevel.cs" />
+    <Compile Include="SpideyLevels.cs" />
     <Compile Include="SpideyUdpMessage.cs" />
     <Compile Include="SpideyTcpClient.cs" />
     <Compile Include="SpideyTcpMessage.cs" />

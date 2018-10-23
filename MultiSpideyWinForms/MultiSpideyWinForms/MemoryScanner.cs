@@ -11,6 +11,7 @@ namespace MultiSpideyWinForms
     {
         public static readonly bool Is64BitProcess = (IntPtr.Size == 8);
 
+        private static long _spideyLevelCheatAddress;
         private static long _enemyCountAddress;
         private static long _spideyAddress;
         private static long _levelAddress;
@@ -21,15 +22,22 @@ namespace MultiSpideyWinForms
         private static readonly long _maximumAddressLong = 0x7fffffff;
         private static readonly uint _dwLength = Is64BitProcess ? Convert.ToUInt32(Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION64))) : Convert.ToUInt32(Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION))); 
 
+        private const string K_KEYS = "4B2D4B657973";
         private const string DEAD = "4445414421";
         private const string ERROR_READING_FILES = "4572726F722072656164696E672066696C6573";
+        private const int SPIDEY_LEVEL_CHEAT_OFFSET = 40;
         private const int ENEMY_COUNT_OFFSET = -38;
         private const int LEVEL_OFFSET = 1279;
+        private const int SPIDEY_X_OFFSET = 2;
+        private const int SPIDEY_Y_OFFSET = 4;
 
+        public const int SPIDEY_LEVEL_CHEAT_DATA_SIZE = 1;
         public const int ENEMY_COUNT_DATA_SIZE = 1;
         public const int ENEMY_HEADER_SIZE = 2;
         public const int SPIDEY_DATA_SIZE = 48;
         public const int LOCATION_DATA_SIZE = 24;
+        public const int SPIDEY_X_DATA_SIZE = 1;
+        public const int SPIDEY_Y_DATA_SIZE = 1;
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -161,8 +169,10 @@ namespace MultiSpideyWinForms
             MEM_PRIVATE = 0x20000
         }
 
-        public static bool GetMemoryAddresses(Form form, IntPtr window)
+        public static bool GetMemoryAddresses(out string error, IntPtr window, bool getSpideyCheat = false)
         {
+            error = "";
+
             GetWindowThreadProcessId(window, out uint processId);
             var process = Process.GetProcessById((int)processId);
 
@@ -173,13 +183,14 @@ namespace MultiSpideyWinForms
 
             if ((Is64BitProcess || IsProcessWow64(Process.GetCurrentProcess())) && !IsProcessWow64(process))
             {
-                form.Invoke(new Action(() => { MessageBox.Show("DOSBox process is 64-bit, please use 32-bit DOSBox"); }));
+                error = "DOSBox process is 64-bit, please use 32-bit DOSBox";
                 return false;
             }
 
             // Open the process with desired access level
             var dosBoxProcess = OpenProcess(ProcessAccessFlags.QueryInformation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite, false, process.Id);
 
+            long spideyLevelCheatAddress = 0;
             long enemyCountAddress = 0;
             long spideyAddress = 0;
             long levelAddress = 0;
@@ -214,7 +225,7 @@ namespace MultiSpideyWinForms
 
                 if (result == 0)
                 {
-                    form.Invoke(new Action(() => { MessageBox.Show("VirtualQueryEx failed"); }));
+                    error = "VirtualQueryEx failed";
                     break;
                 }
 
@@ -228,22 +239,29 @@ namespace MultiSpideyWinForms
                     ReadProcessMemory(dosBoxProcess, baseAddress, buffer, regionSize, out bytesRead);
 
                     // TODO - refactor this to make it faster, maybe don't convert everything to string?
-                    var line = new StringBuilder();
+                    var lineBuilder = new StringBuilder();
                     for (var i = 0; i < regionSize; i++)
                     {
                         //sw.WriteLine("0x{0} : {1}", ((int)mem_basic_info.BaseAddress + i).ToString("X"), (char)buffer[i]);
-                        line.Append(buffer[i].ToString("X2"));
+                        lineBuilder.Append(buffer[i].ToString("X2"));
                     }
 
                     var deadIndex = 0;
                     var errorReadingFilesIndex = 0;
 
-                    if ((deadIndex = line.ToString().IndexOf(DEAD)) > 0 &&
-                        (errorReadingFilesIndex = line.ToString().IndexOf(ERROR_READING_FILES)) > 0)
+                    var line = lineBuilder.ToString();
+                    if ((deadIndex = line.IndexOf(DEAD)) > 0 &&
+                        (errorReadingFilesIndex = line.IndexOf(ERROR_READING_FILES)) > 0)
                     {
                         enemyCountAddress = baseAddress.ToInt32() + (deadIndex / 2) + (DEAD.Length / 2) + ENEMY_COUNT_OFFSET;
                         spideyAddress = baseAddress.ToInt32() + (deadIndex / 2) + (DEAD.Length / 2);
                         levelAddress = baseAddress.ToInt32() + (errorReadingFilesIndex / 2) + (ERROR_READING_FILES.Length / 2) + LEVEL_OFFSET;
+
+                        if (getSpideyCheat)
+                        {
+                            var spideyCheatIndex = line.IndexOf(K_KEYS);
+                            spideyLevelCheatAddress = baseAddress.ToInt32() + (spideyCheatIndex / 2) + (K_KEYS.Length / 2) + SPIDEY_LEVEL_CHEAT_OFFSET;
+                        }
                         break;
                     }
                 }
@@ -257,6 +275,7 @@ namespace MultiSpideyWinForms
             Interlocked.Exchange(ref _enemyCountAddress, enemyCountAddress);
             Interlocked.Exchange(ref _spideyAddress, spideyAddress);
             Interlocked.Exchange(ref _levelAddress, levelAddress);
+            if (getSpideyCheat) Interlocked.Exchange(ref _spideyLevelCheatAddress, spideyLevelCheatAddress);
 
             return (enemyCountAddress > 0 && spideyAddress > 0 && levelAddress > 0);
         }
@@ -277,6 +296,19 @@ namespace MultiSpideyWinForms
             {
                 return false;
             }
+        }
+
+        public static byte ReadSpideyLevelCheatData()
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var spideyLevelCheatAddress = Interlocked.Read(ref _spideyLevelCheatAddress);
+
+            var spideyLevelCheatBuffer = new byte[SPIDEY_LEVEL_CHEAT_DATA_SIZE];
+            if (spideyLevelCheatAddress != 0)
+            {
+                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyLevelCheatAddress), spideyLevelCheatBuffer, SPIDEY_LEVEL_CHEAT_DATA_SIZE, out int bytesRead);
+            }
+            return spideyLevelCheatBuffer[0];
         }
 
         public static byte[] ReadSpideyData()
@@ -305,7 +337,43 @@ namespace MultiSpideyWinForms
 
             return levelBuffer;
         }
-        
+
+        public static byte ReadEnemyCountData()
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var enemyCountAddress = Interlocked.Read(ref _enemyCountAddress);
+
+            var enemyCountBuffer = new byte[ENEMY_COUNT_DATA_SIZE];
+            if (enemyCountAddress != 0)
+            {
+                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), enemyCountBuffer, ENEMY_COUNT_DATA_SIZE, out int bytesRead);
+            }
+            return enemyCountBuffer[0];
+        }
+
+        public static void WriteSpideyLevelCheatData(byte spideyLevel)
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var spideyLevelCheatAddress = Interlocked.Read(ref _spideyLevelCheatAddress);
+
+            if (spideyLevelCheatAddress != 0)
+            {
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyLevelCheatAddress), new byte[] { spideyLevel }, SPIDEY_LEVEL_CHEAT_DATA_SIZE, out int bytesWritten);
+            }
+        }
+
+        public static void WriteSpideyXAndYPosition(byte spideyXPos, byte spideyYPos)
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var spideyAddress = Interlocked.Read(ref _spideyAddress);
+
+            if (spideyAddress != 0)
+            {
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_X_OFFSET), new byte[] { spideyXPos }, SPIDEY_X_DATA_SIZE, out int bytesWritten);
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_Y_OFFSET), new byte[] { spideyYPos }, SPIDEY_Y_DATA_SIZE, out bytesWritten);
+            }
+        }
+
         public static void WriteSpideyData(byte[] spideyData)
         {
             // TODO - will need a way to determine if location has changed (note e.g. Leo's Maze will have problems if just comparing names)

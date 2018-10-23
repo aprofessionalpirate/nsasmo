@@ -10,8 +10,10 @@ using Timer = System.Threading.Timer;
 
 // TODO
 // Properly reset on reset all
-// Handle player disconnection
+// Handle player disconnection + maybe have server just always running?
 // Interpolation of player position
+// Add debug mode where can switch on and off various bytes that are transmitted
+// Rebase code
 
 namespace MultiSpideyWinForms
 {
@@ -151,8 +153,10 @@ namespace MultiSpideyWinForms
                 var timer = state as Timer;
                 if (timer != _startupTimer || _startupTimer == null) return;
 
-                if (!MemoryScanner.GetMemoryAddresses(this, _spideyWindow.Handle))
+                string error;
+                if (!MemoryScanner.GetMemoryAddresses(out error, _spideyWindow.Handle))
                 {
+                    Invoke(new Action(() => { MessageBox.Show(error); }));
                     return;
                 }
 

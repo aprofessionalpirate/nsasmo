@@ -13,7 +13,6 @@ using Timer = System.Threading.Timer;
 // Handle player disconnection + maybe have server just always running?
 // Interpolation of player position
 // Add debug mode where can switch on and off various bytes that are transmitted
-// Rebase code
 
 namespace MultiSpideyWinForms
 {
@@ -402,23 +401,23 @@ namespace MultiSpideyWinForms
 
         private void ReadFromMemory(object state)
         {
-            string location;
             lock (_memoryTimerLock)
             {
                 var timer = state as Timer;
                 if (timer != _memoryTimer || _memoryTimer == null) return;
 
                 var spideyData = MemoryScanner.ReadSpideyData();
-                var locationData = MemoryScanner.ReadLocationData();
+                var levelData = MemoryScanner.ReadLevelData();
 
-                var message = SpideyUdpMessage.CreateSpidermanMessage(_myInfo.Number, spideyData, locationData);
+                var message = SpideyUdpMessage.CreateSpidermanMessage(_myInfo.Number, spideyData, levelData);
 
                 foreach (var udpClient in udpWebSwing)
                 {
                     udpClient.Send(message, message.Length);
                 }
 
-                location = SpideyUdpMessage.AsciiEncoding.GetString(locationData).TrimEnd();
+                var spideyLevel = SpideyLevels.GetSpideyLevel(levelData);
+                var location = spideyLevel.Name.TrimEnd();
                 _onLocationUpdate.Report(new ConnectedPlayerInformation(_myInfo.Number, location));
 
                 _udpBase.MyLastLocation = location;

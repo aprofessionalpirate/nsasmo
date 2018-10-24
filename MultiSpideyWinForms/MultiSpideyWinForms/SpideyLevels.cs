@@ -1,9 +1,25 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace MultiSpideyWinForms
 {
     public static class SpideyLevels
     {
+        private static bool _gotHighestEnemyCount = false;
+        private static byte _highestEnemyCount = byte.MinValue;
+        public static byte HighestEnemyCount
+        {
+            get
+            {
+                if (!_gotHighestEnemyCount)
+                {
+                    _highestEnemyCount = _mapSpideyLevels.Values.Max(s => s.EnemyCount);
+                    _gotHighestEnemyCount = true;
+                }
+                return _highestEnemyCount;
+            }
+        }
+
         private static readonly Dictionary<byte, SpideyLevel> _mapSpideyLevels = new Dictionary<byte, SpideyLevel>
         {
             { 0x00, new SpideyLevel(0x00,"                        ",0x01) },

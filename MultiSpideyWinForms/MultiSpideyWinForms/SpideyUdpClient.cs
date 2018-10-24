@@ -110,9 +110,10 @@ namespace MultiSpideyWinForms
                     // Not supported
                     break;
                 case SpideyUdpMessage.SPIDERMAN:
-                    if (!SpideyUdpMessage.ParseSpidermanMessage(message, out playerNumber, out byte[] spideyData, out byte[] locationData))
+                    if (!SpideyUdpMessage.ParseSpidermanMessage(message, out playerNumber, out byte[] spideyData, out byte levelData))
                         break;
-                    onLocationUpdate.Report(new ConnectedPlayerInformation(playerNumber, SpideyUdpMessage.AsciiEncoding.GetString(locationData).TrimEnd()));
+                    var spideyLevel = SpideyLevels.GetSpideyLevel(levelData);
+                    onLocationUpdate.Report(new ConnectedPlayerInformation(playerNumber, spideyLevel.Name.TrimEnd()));
                     MemoryScanner.WriteSpideyData(spideyData);
                     break;
                 default:

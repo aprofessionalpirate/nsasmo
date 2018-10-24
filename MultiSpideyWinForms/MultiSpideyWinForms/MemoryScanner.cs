@@ -16,6 +16,8 @@ namespace MultiSpideyWinForms
         private static long _levelAddress;
         private static long _dosBoxProcess;
 
+        private static byte _highestEnemyCount;
+
         private static readonly IntPtr _minimumAddress = IntPtr.Zero;
         private static readonly long _minimumAddressLong = _minimumAddress.ToInt64();
         private static readonly long _maximumAddressLong = 0x7fffffff;
@@ -26,7 +28,8 @@ namespace MultiSpideyWinForms
         private const string ERROR_READING_FILES = "4572726F722072656164696E672066696C6573";
         private const int SPIDEY_LEVEL_CHEAT_OFFSET = 40;
         private const int ENEMY_COUNT_OFFSET = -38;
-        private const int LEVEL_OFFSET = 1279;
+        private const int LEVEL_OFFSET = 1266;
+        private const int LEVEL_NAME_OFFSET = 1279;
         private const int SPIDEY_X_OFFSET = 2;
         private const int SPIDEY_Y_OFFSET = 4;
 
@@ -34,7 +37,8 @@ namespace MultiSpideyWinForms
         public const int ENEMY_COUNT_DATA_SIZE = 1;
         public const int ENEMY_HEADER_SIZE = 2;
         public const int SPIDEY_DATA_SIZE = 48;
-        public const int LOCATION_DATA_SIZE = 24;
+        public const int LEVEL_DATA_SIZE = 1;
+        public const int LEVEL_NAME_DATA_SIZE = 24;
         public const int SPIDEY_X_DATA_SIZE = 1;
         public const int SPIDEY_Y_DATA_SIZE = 1;
 
@@ -256,6 +260,8 @@ namespace MultiSpideyWinForms
                         spideyAddress = baseAddress.ToInt32() + (deadIndex / 2) + (DEAD.Length / 2);
                         levelAddress = baseAddress.ToInt32() + (errorReadingFilesIndex / 2) + (ERROR_READING_FILES.Length / 2) + LEVEL_OFFSET;
 
+                        // TODO - find a more appropriate spot to put this
+                        _highestEnemyCount = SpideyLevels.HighestEnemyCount;
                         if (getSpideyCheat)
                         {
                             var spideyCheatIndex = line.IndexOf(K_KEYS);
@@ -333,18 +339,33 @@ namespace MultiSpideyWinForms
             return spideyBuffer;
         }
 
-        public static byte[] ReadLocationData()
+        public static byte ReadLevelData()
         {
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var levelAddress = Interlocked.Read(ref _levelAddress);
 
-            var levelBuffer = new byte[LOCATION_DATA_SIZE];
+            var levelBuffer = new byte[LEVEL_DATA_SIZE];
             if (levelAddress != 0)
             {
-                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(levelAddress), levelBuffer, LOCATION_DATA_SIZE, out int bytesRead);
+                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(levelAddress), levelBuffer, LEVEL_DATA_SIZE, out int bytesRead);
             }
 
-            return levelBuffer;
+            return levelBuffer[0];
+        }
+
+        public static byte[] ReadLevelNameData()
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var levelAddress = Interlocked.Read(ref _levelAddress);
+            var levelNameAddress = levelAddress + (LEVEL_NAME_OFFSET - LEVEL_OFFSET);
+
+            var levelNameBuffer = new byte[LEVEL_NAME_DATA_SIZE];
+            if (levelNameAddress != 0)
+            {
+                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(levelNameAddress), levelNameBuffer, LEVEL_NAME_DATA_SIZE, out int bytesRead);
+            }
+
+            return levelNameBuffer;
         }
 
         public static byte ReadEnemyCountData()
@@ -385,7 +406,6 @@ namespace MultiSpideyWinForms
 
         public static void WriteSpideyData(byte[] spideyData)
         {
-            // TODO - will need a way to determine if location has changed (note e.g. Leo's Maze will have problems if just comparing names)
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var enemyCountAddress = Interlocked.Read(ref _enemyCountAddress);
             var spideyAddress = Interlocked.Read(ref _spideyAddress);

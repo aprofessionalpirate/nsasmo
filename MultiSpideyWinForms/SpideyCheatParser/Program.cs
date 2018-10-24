@@ -47,7 +47,7 @@ namespace SpideyCheatParser
                         {
                             MemoryScanner.WriteSpideyXAndYPosition(0x77, 0x77);
                         }
-                        var name = AsciiEncoding.GetString(MemoryScanner.ReadLocationData());
+                        var name = AsciiEncoding.GetString(MemoryScanner.ReadLevelNameData());
                         var enemyCount = MemoryScanner.ReadEnemyCountData();
                         output.WriteLine(levelNumber.ToString("X2") + "|" + name + "|" + enemyCount.ToString("X2"));
                     }

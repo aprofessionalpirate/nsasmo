@@ -12,7 +12,9 @@ using Timer = System.Threading.Timer;
 // Properly reset on reset all
 // Handle player disconnection + maybe have server just always running?
 // Interpolation of player position
-// Add debug mode where can switch on and off various bytes that are transmitted
+// Add debug mode where can switch on and off various bytes that are transmitted - figure out why cutting half fixes problems
+// Investigate duplicates in levels (ex. Leo's Maze) - what does it mean?
+// Remember last position of spideys in case of slow/disconnection?
 
 namespace MultiSpideyWinForms
 {
@@ -350,7 +352,7 @@ namespace MultiSpideyWinForms
         {
             if (!started) return;
 
-            _udpClient.StartGame();
+            _udpClient.StartGame(udpWebSwing.Count);
             StartMemoryTimer();
         }
 

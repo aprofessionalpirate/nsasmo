@@ -90,7 +90,14 @@ namespace MultiSpideyWinForms
 
         public static SpideyLevel GetSpideyLevel(byte levelNumber)
         {
-            return _mapSpideyLevels[levelNumber];
+            try
+            {
+                return _mapSpideyLevels[levelNumber];
+            }
+            catch (KeyNotFoundException)
+            {
+                return new SpideyLevel(0, "ERROR", 1);
+            }
         }
     }
 }

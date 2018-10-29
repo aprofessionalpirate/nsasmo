@@ -8,7 +8,11 @@ namespace MultiSpideyWinForms
 {
     public static class MemoryScanner
     {
-        public static readonly bool Is64BitProcess = (IntPtr.Size == 8);
+        public static readonly bool Is64BitProcess = IntPtr.Size == 8;
+
+        private static readonly byte[] DEAD_ENEMY_PLACEHOLDER = new byte[] { 0x00, 0x24, 0xF3, 0xFF, 0x34, 0x00, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5F, 0x00, 0x00, 0x89, 0x1D, 0x01, 0x00, 0x8D, 0xA5, 0x82, 0xA5, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x0D, 0x10, 0x53, 0x01, 0xFB, 0xFF, 0x07, 0x00, 0x39, 0x48, 0x00, 0x00, 0x00, 0x83, 0xA5, 0xF2, 0xFF, 0x33, 0x00 };
+        private static readonly byte[] PLAYER_DATA_HALF_PLACEHOLDER = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x0E, 0x98, 0x92, 0x22, 0x00, 0x2F, 0x00, 0x9A, 0xA7, 0xC0, 0xC0, 0x00, 0x9A, 0x9B, 0x22, 0x00, 0x93, 0x02 };
+        private static readonly byte[] PLAYER_DATA_HALF_PLACEHOLDER_CRAZY = new byte[] { 0x04, 0x01, 0x00, 0x00, 0x00, 0x0D, 0x10, 0x53, 0x01, 0xFB, 0xFF, 0x07, 0x00, 0x39, 0x48, 0xC0, 0x00, 0x00, 0x83, 0xA5, 0xF2, 0xFF, 0x33, 0x00 };
 
         private static long _spideyLevelCheatAddress;
         private static long _enemyCountAddress;
@@ -341,7 +345,11 @@ namespace MultiSpideyWinForms
 
         public static byte ReadLevelData()
         {
-            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            return ReadLevelData(Interlocked.Read(ref _dosBoxProcess));
+        }
+
+        private static byte ReadLevelData(long dosBoxProcess)
+        {
             var levelAddress = Interlocked.Read(ref _levelAddress);
 
             var levelBuffer = new byte[LEVEL_DATA_SIZE];
@@ -404,30 +412,57 @@ namespace MultiSpideyWinForms
             }
         }
 
-        public static void WriteSpideyData(byte[] spideyData)
+        public static void WriteSpideyData(byte[] spideyData, SpideyLevel playerSpideyLevel, int playerOffset, int playerCount)
         {
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
             var enemyCountAddress = Interlocked.Read(ref _enemyCountAddress);
             var spideyAddress = Interlocked.Read(ref _spideyAddress);
+            int bytesWritten;
 
             if (enemyCountAddress != 0)
             {
-                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), new byte[] { 3 }, ENEMY_COUNT_DATA_SIZE, out int bytesWritten);
+                var newEnemyCount = Convert.ToByte(_highestEnemyCount + playerCount);
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), new byte[] { newEnemyCount }, ENEMY_COUNT_DATA_SIZE, out bytesWritten);
             }
+
+            var mySpideyLevel = SpideyLevels.GetSpideyLevel(ReadLevelData(dosBoxProcess));
+
             if (spideyAddress != 0)
             {
+                // Null out any extra enemy data that shouldn't be there
+                var invalidEnemies = _highestEnemyCount - mySpideyLevel.EnemyCount;
+                while (invalidEnemies > 0)
+                {
+                    var enemyIndex = _highestEnemyCount - invalidEnemies - 1;
+                    var enemyMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * enemyIndex;
+                    var enemyData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
+                    enemyData[0] = 0xC0;
+                    enemyData[1] = Convert.ToByte(enemyIndex);
+                    Buffer.BlockCopy(DEAD_ENEMY_PLACEHOLDER, 0, enemyData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+                    WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset), enemyData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out bytesWritten);
+                    --invalidEnemies;
+                }
+
+                var playerIndex = _highestEnemyCount + playerOffset - 1;
+                var playeMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * playerIndex;
                 var playerData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
                 playerData[0] = 0xC0;
-                playerData[1] = 0x01;
-                Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
-                //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out int bytesWritten);
-                
-                // Cutting out half the data seems to fix graphical glitching issues and disables interaction with other player's game
-                // TODO - figure out why and which bytes should actually be sent
-                var cutDownSize = Convert.ToUInt32(ENEMY_HEADER_SIZE + (SPIDEY_DATA_SIZE / 2));
-                var cutDownPlayerData = new byte[cutDownSize];
-                Buffer.BlockCopy(playerData, 0, cutDownPlayerData, 0, Convert.ToInt32(cutDownSize));
-                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE), cutDownPlayerData, cutDownSize, out int bytesWritten);
+                playerData[1] = Convert.ToByte(playerIndex);
+
+                if (playerSpideyLevel.Number == mySpideyLevel.Number)
+                {
+                    Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+
+                    // Cutting out half the data seems to fix graphical glitching issues and disables interaction with other player's game
+                    // Maybe not
+                    //Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE / 2);
+                    //Buffer.BlockCopy(PLAYER_DATA_HALF_PLACEHOLDER, 0, playerData, ENEMY_HEADER_SIZE + (SPIDEY_DATA_SIZE / 2), SPIDEY_DATA_SIZE / 2);
+                }
+                else
+                {
+                    Buffer.BlockCopy(DEAD_ENEMY_PLACEHOLDER, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+                }
+                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + playeMemoryOffset), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out bytesWritten);
             }
         }
     }

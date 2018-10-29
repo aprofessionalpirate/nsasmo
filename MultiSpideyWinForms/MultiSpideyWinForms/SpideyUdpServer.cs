@@ -8,6 +8,8 @@ namespace MultiSpideyWinForms
 {
     public class SpideyUdpServer : SpideyUdpBase
     {
+        private int _playerCount;
+
         public SpideyUdpServer(ushort port) : base(port)
         {
         }
@@ -29,7 +31,7 @@ namespace MultiSpideyWinForms
             var udpClient = new UdpClient(new IPEndPoint(IPAddress.Any, _port));
             try
             {
-                //var playerInfo = new List<byte[]>(numberOfPlayers);
+                _playerCount = 0;
 
                 while (!_udpTaskCancellationToken.IsCancellationRequested)
                 {
@@ -61,14 +63,19 @@ namespace MultiSpideyWinForms
                         break;
                     
                     var added = tcpServer.AddUdpClientInformation(playerNumber, result.RemoteEndPoint);
-                    if (added) onReceiveUdpInfo.Report(new ConnectedPlayerUdpEndPoint(playerNumber, new IPEndPoint(result.RemoteEndPoint.Address, result.RemoteEndPoint.Port)));
+                    if (added)
+                    {
+                        ++_playerCount;
+                        onReceiveUdpInfo.Report(new ConnectedPlayerUdpEndPoint(playerNumber, new IPEndPoint(result.RemoteEndPoint.Address, result.RemoteEndPoint.Port)));
+                    }
                     break;
                 case SpideyUdpMessage.SPIDERMAN:
                     if (!SpideyUdpMessage.ParseSpidermanMessage(message, out playerNumber, out byte[] spideyData, out byte levelData))
                         break;
                     var spideyLevel = SpideyLevels.GetSpideyLevel(levelData);
                     onLocationUpdate.Report(new ConnectedPlayerInformation(playerNumber, spideyLevel.Name.TrimEnd()));
-                    MemoryScanner.WriteSpideyData(spideyData);
+                    var playerOffset = playerNumber - 2; // Server is always player 1
+                    MemoryScanner.WriteSpideyData(spideyData, spideyLevel, playerOffset, _playerCount);
                     break;
                 default:
                     break;

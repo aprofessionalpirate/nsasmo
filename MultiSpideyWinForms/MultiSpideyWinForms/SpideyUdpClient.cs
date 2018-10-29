@@ -15,8 +15,8 @@ namespace MultiSpideyWinForms
 
         private SemaphoreSlim _tcpConnected;
         private SemaphoreSlim _gameStarted;
-        private ConcurrentDictionary<int, IPEndPoint> _mapOtherPlayers; 
         private byte _myPlayerNumber;
+        private int _playerCount;
 
         public SpideyUdpClient(IPAddress serverIp, ushort port) : base(port)
         {
@@ -29,7 +29,6 @@ namespace MultiSpideyWinForms
             {
                 _tcpConnected = new SemaphoreSlim(0, 1);
                 _gameStarted = new SemaphoreSlim(0, 1);
-                _mapOtherPlayers = new ConcurrentDictionary<int, IPEndPoint>();
                 var lTask = new Task<Task>(async () => await StartListening(onConnected, onLocationUpdate));
                 _udpTask = lTask.Unwrap();
                 //_serverTask.ObserveExceptions();
@@ -42,11 +41,6 @@ namespace MultiSpideyWinForms
         {
             _myPlayerNumber = playerNumber;
             _tcpConnected.Release();
-        }
-
-        public void AddPlayer(int playerNumber, IPEndPoint ipEndpoint)
-        {
-            _mapOtherPlayers.TryAdd(playerNumber, new IPEndPoint(ipEndpoint.Address, ipEndpoint.Port));
         }
 
         public async Task StartListening(IProgress<bool> onConnected, IProgress<ConnectedPlayerInformation> onLocationUpdate)
@@ -114,15 +108,25 @@ namespace MultiSpideyWinForms
                         break;
                     var spideyLevel = SpideyLevels.GetSpideyLevel(levelData);
                     onLocationUpdate.Report(new ConnectedPlayerInformation(playerNumber, spideyLevel.Name.TrimEnd()));
-                    MemoryScanner.WriteSpideyData(spideyData);
+                    int playerOffset;
+                    if (playerNumber < _myPlayerNumber)
+                    {
+                        playerOffset = playerNumber - 1;
+                    }
+                    else
+                    {
+                        playerOffset = playerNumber - 2;
+                    }
+                    MemoryScanner.WriteSpideyData(spideyData, spideyLevel, playerOffset, _playerCount);
                     break;
                 default:
                     break;
             }
         }
 
-        public void StartGame()
+        public void StartGame(int playerCount)
         {
+            _playerCount = playerCount;
             _gameStarted.Release();
         }
     }

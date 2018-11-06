@@ -14,6 +14,11 @@ namespace MultiSpideyWinForms
                 if (!_gotHighestEnemyCount)
                 {
                     _highestEnemyCount = _mapSpideyLevels.Values.Max(s => s.EnemyCount);
+                    // This is neccesary to avoid writing over spidey web data which is stored in C0 03 array
+                    if (_highestEnemyCount < 5)
+                    {
+                        _highestEnemyCount = 5;
+                    }
                     _gotHighestEnemyCount = true;
                 }
                 return _highestEnemyCount;

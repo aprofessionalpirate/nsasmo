@@ -175,6 +175,7 @@ namespace MultiSpideyWinForms
             {
                 if (_gameStarted)
                 {
+                    MemoryScanner.PrepSpideyData(tcpClients.Count);
                     foreach (var tcpClient in tcpClients)
                     {
                         foreach (var playerEndpoint in _mapPlayerEndpoints)

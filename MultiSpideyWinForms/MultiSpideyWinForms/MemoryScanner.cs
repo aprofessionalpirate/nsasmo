@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -10,9 +12,8 @@ namespace MultiSpideyWinForms
     {
         public static readonly bool Is64BitProcess = IntPtr.Size == 8;
 
-        private static readonly byte[] DEAD_ENEMY_PLACEHOLDER = new byte[] { 0x00, 0x24, 0xF3, 0xFF, 0x34, 0x00, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5F, 0x00, 0x00, 0x89, 0x1D, 0x01, 0x00, 0x8D, 0xA5, 0x82, 0xA5, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x0D, 0x10, 0x53, 0x01, 0xFB, 0xFF, 0x07, 0x00, 0x39, 0x48, 0x00, 0x00, 0x00, 0x83, 0xA5, 0xF2, 0xFF, 0x33, 0x00 };
-        private static readonly byte[] PLAYER_DATA_HALF_PLACEHOLDER = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x0E, 0x98, 0x92, 0x22, 0x00, 0x2F, 0x00, 0x9A, 0xA7, 0xC0, 0xC0, 0x00, 0x9A, 0x9B, 0x22, 0x00, 0x93, 0x02 };
-        private static readonly byte[] PLAYER_DATA_HALF_PLACEHOLDER_CRAZY = new byte[] { 0x04, 0x01, 0x00, 0x00, 0x00, 0x0D, 0x10, 0x53, 0x01, 0xFB, 0xFF, 0x07, 0x00, 0x39, 0x48, 0xC0, 0x00, 0x00, 0x83, 0xA5, 0xF2, 0xFF, 0x33, 0x00 };
+        private static readonly byte[] DEAD_ENEMY_PLACEHOLDER = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        private static readonly byte[] PLAYER_DATA_HALF_PLACEHOLDER = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
         private static long _spideyLevelCheatAddress;
         private static long _enemyCountAddress;
@@ -45,6 +46,8 @@ namespace MultiSpideyWinForms
         public const int LEVEL_NAME_DATA_SIZE = 24;
         public const int SPIDEY_X_DATA_SIZE = 1;
         public const int SPIDEY_Y_DATA_SIZE = 1;
+
+        public static ConcurrentDictionary<int, byte> SpriteOverrides = new ConcurrentDictionary<int, byte>();
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -412,6 +415,62 @@ namespace MultiSpideyWinForms
             }
         }
 
+        public static void PrepSpideyData(int playerCount)
+        {
+            var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
+            var spideyAddress = Interlocked.Read(ref _spideyAddress);
+            int bytesWritten;
+            if (spideyAddress != 0)
+            {
+                //var playerData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
+                //playerData[0] = 0xC0;
+                //Buffer.BlockCopy(DEAD_ENEMY_PLACEHOLDER, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+
+                for (var playerIndex = 0; playerIndex < playerCount; ++playerIndex)
+                {
+                    var spideyIndex = playerIndex + (_highestEnemyCount - 1);
+                    //playerData[1] = Convert.ToByte(spideyIndex);
+                    var playerMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * spideyIndex;
+
+                    var singleByteBuffer = new byte[1];
+                    // Just the essential enemy bits
+                    // Blank sprite
+                    var lSpriteAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 8;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lSpriteAddress), singleByteBuffer, 1, out int bytesRead);
+                    if (singleByteBuffer[0] < 0x50 || singleByteBuffer[0] > 0x5F)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lSpriteAddress), new byte[] { 0x5F }, 1, out bytesWritten);
+                    }
+
+                    // To avoid corruption
+                    var lCorruptionOneAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 31;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionOneAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] == 0x00)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionOneAddress), new byte[] { 0x01 }, 1, out bytesWritten);
+                    }
+
+                    // To avoid corruption
+                    var lCorruptionTwoAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 34;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionTwoAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] == 0x00)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionTwoAddress), new byte[] { 0x01 }, 1, out bytesWritten);
+                    }
+
+                    // Enemy health
+                    var lEnemyHealthAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 41;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lEnemyHealthAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] != 0x00)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lEnemyHealthAddress), new byte[] { 0x00 }, 1, out bytesWritten);
+                    }
+                }
+            }
+        }
+
+        // TODO - looks like 0xC0 is not so straightforward - not just an array count
+        // e.g. MJ = FF 04, Rat = C0 81??
         public static void WriteSpideyData(byte[] spideyData, SpideyLevel playerSpideyLevel, int playerOffset, int playerCount)
         {
             var dosBoxProcess = Interlocked.Read(ref _dosBoxProcess);
@@ -419,51 +478,157 @@ namespace MultiSpideyWinForms
             var spideyAddress = Interlocked.Read(ref _spideyAddress);
             int bytesWritten;
 
-            if (enemyCountAddress != 0)
-            {
-                var newEnemyCount = Convert.ToByte(_highestEnemyCount + playerCount);
-                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), new byte[] { newEnemyCount }, ENEMY_COUNT_DATA_SIZE, out bytesWritten);
-            }
-
             var mySpideyLevel = SpideyLevels.GetSpideyLevel(ReadLevelData(dosBoxProcess));
 
-            if (spideyAddress != 0)
+            // TODO - fix teleporting enemy issue - prolly to do with how they get stored in array
+            if (enemyCountAddress != 0 && spideyAddress != 0)
             {
-                // Null out any extra enemy data that shouldn't be there
-                var invalidEnemies = _highestEnemyCount - mySpideyLevel.EnemyCount;
-                while (invalidEnemies > 0)
+                var desiredEnemyCount = Convert.ToByte(_highestEnemyCount + playerCount);
+                var enemyCountBuffer = new byte[ENEMY_COUNT_DATA_SIZE];
+                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), enemyCountBuffer, ENEMY_COUNT_DATA_SIZE, out int bytesRead);
+                var enemyCountNeedsUpdate = false;
+                if (enemyCountBuffer[0] < desiredEnemyCount)
                 {
-                    var enemyIndex = _highestEnemyCount - invalidEnemies - 1;
-                    var enemyMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * enemyIndex;
-                    var enemyData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
-                    enemyData[0] = 0xC0;
-                    enemyData[1] = Convert.ToByte(enemyIndex);
-                    Buffer.BlockCopy(DEAD_ENEMY_PLACEHOLDER, 0, enemyData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
-                    WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset), enemyData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out bytesWritten);
-                    --invalidEnemies;
-                }
+                    enemyCountNeedsUpdate = true;
 
+                    // Null out any extra enemy data that shouldn't be there
+                    var invalidEnemies = _highestEnemyCount - mySpideyLevel.EnemyCount;
+                    var enemyData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
+                    //enemyData[0] = 0xC0;
+                    Buffer.BlockCopy(DEAD_ENEMY_PLACEHOLDER, 0, enemyData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+                    while (invalidEnemies > 0)
+                    {
+                        // TODO - Try copy the first enemy to other spots as well so it loads the right values?
+
+                        var enemyIndex = _highestEnemyCount - invalidEnemies - 1;
+                        var enemyMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * enemyIndex;
+                        //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset), new byte[] { 0xC0 }, 1, out bytesWritten);
+                        //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 1), new byte[] { 0x01 }, 1, out bytesWritten);
+
+                        var singleByteBuffer = new byte[1];
+                        // Just the essential enemy bits
+                        // Blank sprite
+                        var lSpriteAddress = spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 8;
+                        ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lSpriteAddress), singleByteBuffer, 1, out bytesRead);
+                        if (singleByteBuffer[0] < 0x50 || singleByteBuffer[0] > 0x5F)
+                        {
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lSpriteAddress), new byte[] { 0x5F }, 1, out bytesWritten);
+                        }
+
+                        // To avoid corruption
+                        var lCorruptionOneAddress = spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 31;
+                        ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionOneAddress), singleByteBuffer, 1, out bytesRead);
+                        if (singleByteBuffer[0] == 0x00)
+                        {
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionOneAddress), new byte[] { 0x01 }, 1, out bytesWritten);
+                        }
+
+                        // To avoid corruption
+                        var lCorruptionTwoAddress = spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 34;
+                        ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionTwoAddress), singleByteBuffer, 1, out bytesRead);
+                        if (singleByteBuffer[0] == 0x00)
+                        {
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionTwoAddress), new byte[] { 0x01 }, 1, out bytesWritten);
+                        }
+
+                        // Enemy health
+                        var lEnemyHealthAddress = spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 41;
+                        ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lEnemyHealthAddress), singleByteBuffer, 1, out bytesRead);
+                        if (singleByteBuffer[0] != 0x00)
+                        {
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lEnemyHealthAddress), new byte[] { 0x00 }, 1, out bytesWritten);
+                        }
+                        /*
+                        //enemyData[1] = Convert.ToByte(enemyIndex);
+                        if (enemyIndex == 3)
+                        {
+                            // TODO - tidy up, need to skip bytes 3 and 4 as they contain web swing data
+                            // TODO - also seems to cause instant win when going to end screen, maybe just need to send bare minimum?
+                            //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset), enemyData, 3, out bytesWritten);
+                            //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 5), enemyData.Skip(5).ToArray(), 45, out bytesWritten);
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 8), new byte[] { 0x5F }, 1, out bytesWritten);
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 31), new byte[] { 0x01 }, 1, out bytesWritten);
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset + 34), new byte[] { 0x01 }, 1, out bytesWritten);
+                        }
+                        else
+                        {
+                            WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + enemyMemoryOffset), enemyData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out bytesWritten);
+                        }*/
+                        --invalidEnemies;
+                    }
+                }
                 var playerIndex = _highestEnemyCount + playerOffset - 1;
-                var playeMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * playerIndex;
+                var playerMemoryOffset = (ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE) * playerIndex;
                 var playerData = new byte[ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE];
-                playerData[0] = 0xC0;
-                playerData[1] = Convert.ToByte(playerIndex);
+                //playerData[0] = 0xC0;
+                //playerData[1] = Convert.ToByte(playerIndex);
 
                 if (playerSpideyLevel.Number == mySpideyLevel.Number)
                 {
                     Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+                    //WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out bytesWritten);
 
                     // Cutting out half the data seems to fix graphical glitching issues and disables interaction with other player's game
-                    // Maybe not
-                    //Buffer.BlockCopy(spideyData, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE / 2);
-                    //Buffer.BlockCopy(PLAYER_DATA_HALF_PLACEHOLDER, 0, playerData, ENEMY_HEADER_SIZE + (SPIDEY_DATA_SIZE / 2), SPIDEY_DATA_SIZE / 2);
+                    WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset), playerData, ENEMY_HEADER_SIZE + (SPIDEY_DATA_SIZE / 2), out bytesWritten);
                 }
                 else
                 {
-                    Buffer.BlockCopy(DEAD_ENEMY_PLACEHOLDER, 0, playerData, ENEMY_HEADER_SIZE, SPIDEY_DATA_SIZE);
+                    var singleByteBuffer = new byte[1];
+                    // Just the essential enemy bits
+                    // Blank sprite
+                    var lSpriteAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 8;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lSpriteAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] < 0x50 || singleByteBuffer[0] > 0x5F)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lSpriteAddress), new byte[] { 0x5F }, 1, out bytesWritten);
+                    }
+
+                    // To avoid corruption
+                    var lCorruptionOneAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 31;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionOneAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] == 0x00)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionOneAddress), new byte[] { 0x01 }, 1, out bytesWritten);
+                    }
+
+                    // To avoid corruption
+                    var lCorruptionTwoAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 34;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionTwoAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] == 0x00)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lCorruptionTwoAddress), new byte[] { 0x01 }, 1, out bytesWritten);
+                    }
+
+                    // Enemy health
+                    var lEnemyHealthAddress = spideyAddress + SPIDEY_DATA_SIZE + playerMemoryOffset + 41;
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lEnemyHealthAddress), singleByteBuffer, 1, out bytesRead);
+                    if (singleByteBuffer[0] != 0x00)
+                    {
+                        WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(lEnemyHealthAddress), new byte[] { 0x00 }, 1, out bytesWritten);
+                    }
                 }
-                WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(spideyAddress + SPIDEY_DATA_SIZE + playeMemoryOffset), playerData, ENEMY_HEADER_SIZE + SPIDEY_DATA_SIZE, out bytesWritten);
+
+                if (enemyCountNeedsUpdate)
+                {
+                    WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), new byte[] { desiredEnemyCount }, ENEMY_COUNT_DATA_SIZE, out bytesWritten);
+                }
             }
+
+            /*
+            // If first time doing this, needs to be done slowly (one by one + write enemy data first)
+            if (enemyCountAddress != 0)
+            {
+                var desiredEnemyCount = Convert.ToByte(_highestEnemyCount + playerCount);
+                var enemyCountBuffer = new byte[ENEMY_COUNT_DATA_SIZE];
+                ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), enemyCountBuffer, ENEMY_COUNT_DATA_SIZE, out int bytesRead);
+                while((enemyCountBuffer[0] < desiredEnemyCount) && (bytesRead == ENEMY_COUNT_DATA_SIZE))
+                {
+                    // TODO - detect level change while doing this?
+                    WriteProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), new byte[] { Convert.ToByte(enemyCountBuffer[0] + 1) }, ENEMY_COUNT_DATA_SIZE, out bytesWritten);
+                    ReadProcessMemory(new IntPtr(dosBoxProcess), new IntPtr(enemyCountAddress), enemyCountBuffer, ENEMY_COUNT_DATA_SIZE, out bytesRead);
+                    Thread.Sleep(5000);
+                }
+            }*/
         }
     }
 }

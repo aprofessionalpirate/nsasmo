@@ -127,6 +127,7 @@ namespace MultiSpideyWinForms
         public void StartGame(int playerCount)
         {
             _playerCount = playerCount;
+            MemoryScanner.PrepSpideyData(_playerCount);
             _gameStarted.Release();
         }
     }

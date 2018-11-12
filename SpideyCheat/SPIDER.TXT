@@ -1,0 +1,24 @@
+	This is a cheat for that old game, The Amazing Spiderman.
+ Very useful for ppl, who get stuck in all those numerous rooms...
+ I could never figure out how to get out of the Leo's Maze.
+ This small loader lets you scroll through the levels, just make sure you
+ character is in the right place on the screen.
+ It also fixes some of bugs, such as Ctrl-Break screw ups, etc.
+ Anyway, here it is, enjoy.
+
+>>>>
+ NOTE: your executable should be named SPIDEY.EXE, rename it if it's not.
+>>>>
+
+
+Use +/- on the keypad to move to different levels, use ENTER to update 
+the internal counter of levels if the screen didn't change.
+Also note: unless you used +/- or ENTER the internal counter is not updated,
+although the number displayed in the corner is changed.
+So if you moved to another level by just playing the game,
+press ENTER before using +/- again.
+]/[ keys do the same as +/- on the keypad.
+Use '5' on the keypad (press and hold down) to pause the game.
+This program also makes the Spiderman invulnerable and bypasses the doc-check.
+
+	 Michael Yakubovich

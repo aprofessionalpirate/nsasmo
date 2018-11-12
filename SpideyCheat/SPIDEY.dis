@@ -1,0 +1,271 @@
+void fn0C00_0100(selector ds)
+// stackDelta: 0; fpuStackDelta: 0; fpuMaxParam: -1
+
+// MayUse:  cs ds ss
+// LiveOut:
+// Trashed:
+// Preserved:
+// Terminates process
+fn0C00_0100_exit:
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn:
+
+fn0C00_0100_entry:
+// DataOut: cs ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp
+
+l0C00_0100:
+// DataOut: cs ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp
+
+l0C00_055A:
+	word16 di_16 = 0x0109
+	word16 cx_17 = Mem0[ds:0x0107:word16]
+	word16 ax_18 = 0x0000
+	word16 bx_10 = 0x0000
+// DataOut: ax bx cs cx di ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp
+
+l0C00_0565:
+	ax_18 = ax_18 + Mem0[ds:di_16:word16]
+	bx_10 = bx_10 ^ Mem0[ds:di_16:word16]
+	di_16 = di_16 + 0x0001
+	cx_17 = cx_17 - 0x0001
+	branch cx_17 != 0x0000 l0C00_0565
+// DataOut: al ax bx cs cx di ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid>
+
+l0C00_056C:
+	branch ax_18 != Mem0[ds:0x0103:word16] l0C00_0540
+// DataOut: al bx cs ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid>
+
+l0C00_0572:
+	branch bx_10 != Mem0[ds:0x0105:word16] l0C00_0540
+// DataOut: al cs ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid>
+
+l0C00_0540:
+	word16 di_33 = 0x0526
+// DataOut: al di ds
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid>
+
+l0C00_0543:
+	byte dl_41 = (Mem0[ds:di_33:byte] ^ 0x4D) - 0x59
+	msdos_write_console_char(dl_41)
+	di_33 = di_33 + 0x0001
+	branch dl_41 != 0x00 l0C00_0543
+// DataOut: al di ds
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> dl:<invalid> ah:0x02
+
+l0C00_0555:
+	msdos_terminate(0xFF)
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> dl:<invalid> ah:0x02
+
+l0C00_0578:
+	Mem54[ss:0x0815:word16] = cs
+	selector ds_56 = Mem54[ss:0x0815:selector]
+	Mem58[ds_56:0x036C:byte] = 0x0D
+	msdos_display_string(SEQ(ds_56, 0x010A))
+	byte al_63 = msdos_character_input_without_echo()
+	branch al_63 != 0x03 l0C00_0595
+// DataOut: al cs ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:fp di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid>
+
+l0C00_0595:
+	branch al_63 != 0x1B l0C00_059C
+// DataOut: al cs ds ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:0x08 dx:0x010A al:<invalid>
+
+l0C00_059C:
+	Mem93[ss:0x0815:word16] = cs
+	selector es_94 = Mem93[ss:0x0815:selector]
+	word16 bx_105 = 0x0081
+// DataOut: al bx cs ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:0x08 dx:0x010A al:<invalid>
+
+l0C00_05A2:
+	word16 bx_300 = bx_105
+	branch msdos_resize_memory_block(es_94, bx_300 + 0x0001, out bx_105) l0C00_05A2
+// DataOut: al bx cs ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:0x010A al:<invalid> es:<invalid>
+
+l0C00_05A9:
+	Mem109[ds_56:0x0714:byte] = Mem93[ds_56:0x0714:byte] + msdos_get_current_default_drive()
+	msdos_get_current_directory(0x00, ds_56, 0x0100)
+	word16 di_116 = 0x0717
+	branch Mem109[ds_56:0x0717:byte] == 0x00 l0C00_05CD
+// DataOut: cs di ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:0x4A dx:0x010A al:<invalid> es:<invalid>
+
+l0C00_05C2:
+	word16 cx_282 = 0x0100
+// DataOut: al cs cx di ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:0x0717 cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:0x47 dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:0x0717
+
+l0C00_05C7:
+	branch cx_282 == 0x0000 l0C00_05C9
+// DataOut: al cs cx di ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:0x0717
+
+l0C00_05C7_1:
+	di_116 = di_116 + 0x0001
+	cx_282 = cx_282 - 0x0001
+	branch 0x00 == Mem109[es_94:di_116:byte] l0C00_05C7
+// DataOut: al cs cx di ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:0x0717
+
+l0C00_05C9:
+	Mem294[ds_56:di_116 - 0x0001:byte] = 0x5C
+// DataOut: cs di ds es ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:0x0717
+
+l0C00_05CD:
+	word16 si_124 = 0x06C1
+	word16 cx_125 = 0x0000
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:0x0717
+
+l0C00_05D2:
+	cx_125 = cx_125 + 0x0001
+	si_124 = si_124 + 0x0001
+	branch Mem109[ds_56:si_124:byte] != 0x00 l0C00_05D2
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid>
+
+l0C00_05D9:
+	word16 si_136 = 0x06C2
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid>
+
+l0C00_05DC:
+	branch cx_125 == 0x0000 l0C00_05DE
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid>
+
+l0C00_05DE:
+	Mem148[ss:0x0815:word16] = cs
+	Mem151[ds_56:0x06D2:word16] = Mem148[ss:0x0815:word16]
+	Mem153[ds_56:0x06D0:word16] = 0x06D4
+	Mem155[ds_56:0x06CE:word16] = Mem153[ds_56:0x002C:word16]
+	Mem157[ss:0x0815:word16] = cs
+	selector es_158 = Mem157[ss:0x0815:selector]
+	Mem162[ss:0x0815:word16] = cs
+	selector ds_163 = Mem162[ss:0x0815:selector]
+	word16 si_166 = 0x0080
+	word16 di_167 = 0x06D4
+	word16 cx_173 = (word16) Mem162[ds_163:0x0080:byte] + 0x0002
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid>
+
+l0C00_0600:
+	branch cx_173 == 0x0000 l0C00_0602
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid> cl:<invalid>
+
+l0C00_0602:
+	Mem188[ss:0x0815:word16] = cs
+	word32 es_bx_192 = msdos_get_interrupt_vector(0x1B)
+	Mem195[0x0C00:0x06AE:word16] = SLICE(es_bx_192, selector, 16)
+	Mem196[0x0C00:0x06AC:word16] = (word16) es_bx_192
+	Mem198[ss:0x0815:word16] = cs
+	word32 es_bx_202 = msdos_get_interrupt_vector(0x10)
+	Mem205[0x0C00:0x045B:word16] = SLICE(es_bx_202, selector, 16)
+	Mem206[0x0C00:0x0459:word16] = (word16) es_bx_202
+	Mem208[ss:0x0815:word16] = cs
+	word32 es_bx_212 = msdos_get_interrupt_vector(0x09)
+	Mem215[0x0C00:0x0520:word16] = SLICE(es_bx_212, selector, 16)
+	Mem216[0x0C00:0x051E:word16] = (word16) es_bx_212
+	Mem219[ss:0x0815:word16] = cs
+	msdos_set_interrupt_vector(0x10, SEQ(Mem219[ss:0x0815:selector], 0x03A0))
+	Mem226[ss:0x0815:word16] = cs
+	msdos_set_interrupt_vector(0x09, SEQ(Mem226[ss:0x0815:selector], 0x045D))
+	Mem233[ss:0x0815:word16] = cs
+	msdos_set_interrupt_vector(0x1B, SEQ(Mem233[ss:0x0815:selector], 0x039F))
+	Mem240[ss:0x0815:word16] = cs
+	msdos_set_interrupt_vector(0x23, SEQ(Mem240[ss:0x0815:selector], 0x039F))
+	Mem246[ss:0x0815:word16] = cs
+	selector ds_247 = Mem246[ss:0x0815:selector]
+	Mem250[ss:0x0815:word16] = cs
+	branch msdos_exec(0x00, SEQ(ds_247, 0x0714), SEQ(Mem250[ss:0x0815:selector], 0x06CE)) l0C00_0675
+// DataOut: al ds
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid> cl:<invalid>
+
+l0C00_066E:
+	msdos_display_string(SEQ(ds_247, 0x06B0))
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:0x4B00 bx:0x06CE ds:<invalid> ah:0x4B dx:0x0714 al:0x00 es:<invalid> dl:0x14 si:<invalid> cl:<invalid> Sequence es:bx:<invalid>
+
+l0C00_0675:
+	msdos_set_interrupt_vector(0x10, SEQ(Mem250[0x0C00:0x045B:selector], Mem250[0x0C00:0x0459:word16]))
+	msdos_set_interrupt_vector(0x09, SEQ(Mem250[0x0C00:0x0520:selector], Mem250[0x0C00:0x051E:word16]))
+	msdos_set_interrupt_vector(0x1B, SEQ(Mem250[0x0C00:0x06AE:selector], Mem250[0x0C00:0x06AC:word16]))
+	msdos_flush_buffer_and_read_stdin(0xFF)
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:0x06CE ds:<invalid> ah:<invalid> dx:<invalid> al:0x00 es:<invalid> dl:<invalid> si:<invalid> cl:<invalid> Sequence es:bx:<invalid>
+
+l0C00_0600_1:
+	Mem182[es_158:di_167:byte] = Mem162[ds_163:si_166:byte]
+	si_166 = si_166 + 0x0001
+	di_167 = di_167 + 0x0001
+	cx_173 = cx_173 - 0x0001
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid> cl:<invalid>
+
+l0C00_05DC_1:
+	Mem142[es_94:di_116:byte] = Mem109[ds_56:si_136:byte]
+	si_136 = si_136 + 0x0001
+	di_116 = di_116 + 0x0001
+	cx_125 = cx_125 - 0x0001
+// DataOut: cs cx di ds es si ss
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:0x00 si:<invalid>
+
+l0C00_0599:
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:0x08 dx:0x010A al:<invalid>
+
+l0C00_0592:
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:0x08 dx:0x010A al:<invalid>
+
+l0C00_06A7:
+	msdos_terminate(0x00)
+// DataOut:
+// DataOut (flags): 
+// SymbolicIn: sp:0x0817 di:<invalid> cx:<invalid> ax:<invalid> bx:<invalid> ds:<invalid> ah:<invalid> dx:<invalid> al:<invalid> es:<invalid> dl:<invalid> si:<invalid> cl:<invalid> Sequence es:bx:<invalid>
+
+
+

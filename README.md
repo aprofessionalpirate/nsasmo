@@ -1,4 +1,6 @@
 # The Not So Amazing Spider-Man Online
+[SpideyNet (.NET 10 rewrite)](SpideyNet/README.md)
+
 This is an attempt to make the old DOS game 'The Amazing Spider-Man' capable of being played online.
 http://www.mobygames.com/game/amazing-spider-man
 

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Game/VideoMode.cs" Link="VideoMode.cs" />
+    <Compile Include="../Game/TileRaster.cs" Link="TileRaster.cs" />
+    <Compile Include="../Game/GameProfile.cs" Link="GameProfile.cs" />
+    <ProjectReference Include="../Core/Core.csproj" />
+    <ProjectReference Include="../Transport/Transport.csproj" />
+  </ItemGroup>
+</Project>

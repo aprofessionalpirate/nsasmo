@@ -1,0 +1,209 @@
+# SpideyNet
+
+.NET 10 rewrite. The original project is unchanged.
+
+## Run locally
+
+Install the .NET 10 SDK on Windows. From this folder:
+
+```powershell
+dotnet build SpideyNet.slnx -m:1
+dotnet run --project Relay --no-build -- --urls http://localhost:5080
+```
+
+In another terminal:
+
+```powershell
+dotnet run --project Client --no-build
+```
+
+Run `./Launch-Game.ps1`, select **1: VGA**, choose English, then **1: Play New Game**.
+VGA is the preferred target. **4: CGA** remains supported; video mode is detected automatically.
+The launcher uses `core=normal`; dynamic cores can cache patched instructions.
+Override `GameDirectory` and `DosBox` parameters for other paths.
+Refresh DOSBox in the client, select its process, and connect.
+Both players must use the same relay address, private room key and
+interaction and enemies/puzzles settings. Each runs their own DOSBox instance.
+
+`Experimental` injects native actors. `Observe` only sends locations.
+Up to eight players share a room; guests appear only in the same game room.
+Remote actors currently use the local player's animation references.
+
+## Internet play
+
+Run Relay on a publicly reachable host behind HTTPS with WebSocket
+forwarding. Use `wss://your-host` in every client. Clients make outbound
+connections; no player port forwarding or UDP hole punching is required.
+The relay host must be reachable. No hosted service is provisioned here.
+
+Room keys are bearer secrets. The client generates a 96-bit random key.
+Share it privately. Avoid logging `/play` query strings at the reverse proxy.
+Use a dedicated relay for trusted players; this is not an account or
+competitive anti-cheat system. Deploy one relay instance: rooms live in memory.
+
+The relay sends snapshots at 20 Hz. Each connection has one receive worker
+and one send worker, a one-snapshot outbox, message/rate limits, keepalive
+deadlines, and a room cap. Clients reconnect with bounded backoff, expire stale
+players and interpolate positions with a 100 ms delay. WebSocket/TCP favors
+reachability; packet loss can delay later packets. It is not UDP/QUIC transport.
+
+## Experimental interactions
+
+Select `Experimental` under Player interaction on every client in the room.
+Collision checks block crossing another player's approximate body rectangle.
+Press **F8** in DOSBox or click **Fire web** to freeze the nearest player ahead within 64 coordinate units
+for 1.2 seconds. The cooldown is 600 ms. Rooms and facing direction are checked
+by the relay. This is a separate multiplayer command; it does not hook the
+original game's space key or draw a native web projectile.
+
+The client enforces collision/freeze corrections by writing local X/Y only.
+These corrections can jitter under latency. Player health, scoring and the full
+DOS simulation remain independent.
+
+## Shared enemies and puzzles
+
+Choose `Experimental` under **Enemies/puzzles** on every client. This requires
+experimental rendering. Choose `Independent` for the previous behavior or Observe.
+Client and relay must both use protocol version 2; replace older published builds.
+
+The first active player in each game room owns enemy movement. Other players
+receive position, facing, health and death updates. Hits from any player reduce
+shared health. Leaving or disconnecting transfers ownership and retains the
+room's cached enemy state. Enemy AI still runs locally between corrections;
+animation and movement can jitter. Healing and scripted respawns are not modeled.
+
+Switch states are shared globally, including reversible switches and changes
+made in other rooms. Native dirty bits trigger local scripts to update doors,
+tiles and scripted effects. Pending changes retry until acknowledged; a joining
+player adopts the session's state rather than replacing it.
+One player per room reports script results. Followers report native contact/web
+latches, preventing replicated scripts from feeding their effects back as input.
+Input latches are sampled at 20 Hz; brief events can be missed. Every puzzle and
+scripted interaction across all 63 rooms has not been verified.
+
+Moving scenery has separate ownership. A player standing on an object can drive
+it even when another player owns the enemies. Helicopters and platforms share
+their displacement and movement flags. The bridge rebuilds collision tiles and
+the VGA/CGA background from local game assets, and carries local riders with position
+corrections. No sprite pointers or remote tile payloads cross the network.
+Rider detection is approximate; two human players riding together remain unverified.
+
+Use a new room key when starting a new game. Shared progress lives in the relay;
+resetting only DOSBox would reapply the previous session's state. Disconnect
+removes rendering patches but keeps acquired progress in the local game.
+
+## Memory constraints
+
+Disassembly establishes a 50-byte actor stride and a two-byte actor count.
+The apparent two-byte enemy headers are the previous actor's attack fields.
+Actor indexes 5–11 hold guests; 12–16 provide private scratch storage.
+Earlier indexes retain their shared web data.
+
+Only the draw loop's count instruction is patched. Physics, enemy AI and
+room scripts retain their original count. Guests receive separate inactive
+descriptors. A complete renderer signature and a supported video mode are required.
+
+DOSBox threads are briefly suspended during writes and resumed in cleanup.
+Disconnect restores the instruction and reserved bytes. Room transitions
+restore the instruction and discard old-room backups. Unexpected count changes
+stop injection. Process suspension does not select an emulator frame boundary.
+
+Only domain state crosses the network: player/enemy coordinates, health, switch
+states, moving object identities and commands. Process-local sprite references
+and moving object graphics come from local assets. Remote memory addresses and
+raw actor records are never accepted.
+
+Discovery requires both text markers, a plausible player and the exact room
+title. It rejects ambiguous layouts, partial reads and menu state. Every update
+rechecks the markers. The native driver owns its process handle and scans
+bounded chunks from an x64 client. Live verification covers 32-bit DOSBox 0.74-3.
+
+**Injection remains experimental.** Suspension prevents concurrent writes but
+does not choose a frame boundary. Abruptly killing the client during suspension
+can leave DOSBox paused; a killed client cannot restore the renderer patch.
+Restart DOSBox after an abnormal exit. An emulator frame hook is the next step
+for stronger guarantees. Other builds, VGA/EGA modes and dynamic cores are unverified.
+
+## Validate
+
+```powershell
+dotnet build Tests -m:1
+dotnet run --project Tests --no-build
+# With the relay running:
+dotnet run --project Tests --no-build -- --relay ws://localhost:5080
+# With DOSBox in a game room; read only:
+dotnet run --project Probe --no-build
+# Optional thirty-second injection/restoration check:
+dotnet run --project Probe --no-build -- --inject <DOSBox-process-id>
+# Inspect native switches, enemies and moving scenery:
+dotnet run --project Probe --no-build -- --scene <DOSBox-process-id>
+# Two games in the same room; changes switches, scenery and enemy health:
+dotnet run --project Probe --no-build -- --pair ws://localhost:5080 <first-id> <second-id>
+# Also test a native follower contact in Midnight:
+dotnet run --project Probe --no-build -- --pair-contact ws://localhost:5080 <first-id> <second-id>
+# Also defeat an enemy and move both games from Midnight to Foyer:
+dotnet run --project Probe --no-build -- --pair-transition ws://localhost:5080 <first-id> <second-id>
+
+# Show a guest and move/restore scenery, verifying graphics and collision buffers:
+dotnet run --project Probe --no-build -- --video <process-id>
+```
+
+Tests cover record validation, signed coordinates, actor construction,
+interpolation, expiry, collisions and web range. Relay checks use real sockets
+for identities, room isolation, freeze expiry, collision, fragmentation and
+room capacity. Probe hashes reserved bytes before and after restoration.
+Malformed, oversized, binary and invalid-room messages are rejected in socket tests.
+Shared-state checks cover switch dirty bits, acknowledgements, pending damage,
+platform tile rebuilding and authority epochs. Socket checks cover enemy ownership,
+follower damage, switches, rider authority, helicopter movement, late joins,
+handoff, room reentry and death.
+
+Two DOSBox instances verified helicopter displacement with matching collision
+grids, follower switch contact, switch changes, follower damage, enemy death
+and Midnight-to-Foyer handoff. Both renderer instructions were restored.
+Other rooms, simultaneous human riders and long sessions remain unverified.
+
+VGA verification rendered a guest and displaced Midnight's helicopter. Collision
+tiles, all four background planes, actor storage and the renderer restored exactly.
+
+Initial live verification used DOSBox 0.74-3 and a CGA `SPIDEY.EXE` with SHA-256
+`0695C840053C920BF198FA203AE64F8A028AA28EA186351AFA0AD4DE9EFD93F0`.
+The corrected thirty-second rendering test displayed a second Spider-Man,
+kept the physics count at 2, and restored reserved bytes and the renderer.
+The initial layout failed visually and was replaced. Long-session stability
+and play across separate Internet connections remain unverified.
+A live Midnight-to-Foyer transition also completed while the hook was active.
+A desktop-client test received a simulated peer through the relay and rendered
+that moving peer inside DOSBox. Interaction rules have socket tests; two human
+players have not yet tested PvP in separate DOSBox instances.
+Desktop disconnect was also checked after relay loss; cancellation returns to
+the disconnected UI without blocking its thread.
+
+Release output is in `publish/client` and `publish/relay` after publishing:
+
+```powershell
+dotnet publish Client -c Release -o publish/client -m:1
+dotnet publish Relay -c Release -o publish/relay -m:1
+```
+
+The client requires the .NET 10 Desktop Runtime; the relay requires the
+ASP.NET Core 10 runtime. Keep each published directory intact.
+
+## Layers
+
+```text
+Desktop UI
+    |
+Session service
+    +-- Game bridge ---- Process memory driver ---- DOSBox
+    +-- Relay client --- WebSocket framing -------- Relay rooms
+```
+
+`Core` contains protocol and gameplay rules. `Transport` contains socket code.
+`Game` encapsulates Windows memory access. `Client` owns UI/session lifetime.
+`Relay` owns room membership and interaction decisions. `Probe` is diagnostic.
+
+Research: [project wiki](https://github.com/aprofessionalpirate/nsasmo/wiki),
+[sprite analysis](https://github.com/aprofessionalpirate/nsasmo/wiki/Sprite-Analysis),
+[memory searching](https://github.com/aprofessionalpirate/nsasmo/wiki/Memory-Searching).
+Transport: [ASP.NET Core WebSockets](https://learn.microsoft.com/aspnet/core/fundamentals/websockets?view=aspnetcore-10.0).

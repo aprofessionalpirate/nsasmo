@@ -1,0 +1,71 @@
+using SpideyNet.Core;
+
+if (args.Length == 3 && args[0] == "--demo")
+{
+    await DemoPeer.Run(new Uri(args[1]), args[2]);
+    return;
+}
+
+var data = new byte[GameLayout.RecordSize];
+data[2] = 248;
+data[3] = 255;
+data[4] = 147;
+data[6] = 0x12;
+
+Check(() => GameLayout.Decode(data, 2)?.X == -8, "Signed offscreen coordinate");
+Check(() => GameLayout.Decode(data, 0) is null, "Reject menu/dead zone");
+Check(() => GameLayout.Decode(data, 64) is null, "Reject unknown room");
+Check(() => GameLayout.Decode(data.AsSpan(0, 12), 2) is null, "Reject partial read");
+data[6] = 0x80;
+Check(() => GameLayout.Decode(data, 2) is null, "Reject non-player data");
+data[6] = 0x12;
+data[19] = 0x94;
+data[20] = 0x9B;
+data[39] = 0xC0;
+data[31] = 0x98;
+data[32] = 0x92;
+var source = data.ToArray();
+var guest = new GameFrame(2, 96, 147, 2, 0xAA);
+const ushort GuestDescriptor = 0x9509;
+var actor = EnemyPlan.Build(data, guest, GuestDescriptor);
+Check(() => actor.Length == EnemyPlan.Stride, "Bounded enemy record");
+Check(() => actor[1] == 0, "Do not copy local input");
+Check(() => actor[19] == data[19], "Use local sprite references");
+Check(() => System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(actor.AsSpan(31)) == GuestDescriptor,
+    "Use a separate valid actor descriptor");
+Check(() => actor[39] == 0 && actor[48] == 0 && actor[49] == 0, "Do not copy health or attack power");
+Check(() => data.SequenceEqual(source), "Do not mutate source record");
+Check(() => EnemyPlan.NativeCount + EnemyPlan.MaxGuests <= EnemyPlan.Capacity, "Stay within documented count");
+Check(() => EnemyPlan.Build(data, null, GuestDescriptor)[6] == 0x5F, "Hide absent players");
+Check(() => EnemyPlan.MaxGuests * EnemyPlan.DescriptorSize <= (EnemyPlan.Capacity - EnemyPlan.DescriptorSlot) * EnemyPlan.Stride,
+    "Descriptors fit outside the active actor range");
+Check(() => RenderPatch.Build(12).SequenceEqual(new byte[] { 0xB9, 12, 0, 0x90 }), "Patch only the renderer count instruction");
+
+var track = new RemoteTrack();
+track.Add(guest with { X = 0 }, 1000);
+track.Add(guest with { X = 20 }, 1100);
+Check(() => track.Sample(1150)?.X == 10, "Interpolate between buffered samples");
+Check(() => track.Sample(4000) is null, "Expire disconnected players");
+track.Add(guest with { Level = 3, X = 100 }, 4100);
+Check(() => track.Sample(4100)?.X == 100, "Snap across rooms");
+Check(() => InteractionRules.WebHits(guest with { Facing = 0, X = 0 }, guest with { X = 40 }), "Web reaches player ahead");
+Check(() => !InteractionRules.WebHits(guest with { Facing = 2, X = 0 }, guest with { X = 40 }), "Web respects facing");
+Check(() => !InteractionRules.WebHits(guest, guest with { Level = 3 }), "Web cannot cross rooms");
+Check(() => InteractionRules.Collides(guest with { X = 0 }, guest with { X = 80 }, guest with { X = 40 }), "Swept player collision");
+Check(() => !InteractionRules.Collides(guest with { X = 0 }, guest with { X = 80 }, guest with { X = 40, Y = 50 }), "Separate vertical collision lanes");
+SharedChecks.Run();
+VideoChecks.Run();
+if (args.Length == 2 && args[0] == "--relay")
+{
+    await IntegrationChecks.Run(new Uri(args[1]));
+    await SharedSocketChecks.Run(new Uri(args[1]));
+}
+Console.WriteLine("All checks passed.");
+
+static void Check(Func<bool> condition, string name)
+{
+    if (!condition())
+    {
+        throw new InvalidOperationException(name);
+    }
+}

@@ -48,7 +48,7 @@ internal sealed class Session
             await Task.Run(async () =>
             {
                 using var game = new GameBridge(processId, linked.Token);
-                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(NetRules.TickMs));
+                using var timer = new PeriodicTimer(NetRules.TickInterval);
                 var tracks = new Dictionary<Guid, RemoteTrack>();
                 var sceneTrack = new SharedTrack();
                 long lastTick = -1;
@@ -66,7 +66,14 @@ internal sealed class Session
                         relay.Publish(scene?.Frame, scene is null ? null : sceneTrack.Capture(scene, state));
                         if (scene is not null && sceneTrack.Accept(scene, state) is { } correction)
                         {
-                            game.SyncScene(correction);
+                            var enemyMode = correction.Room is { } roomState && roomState.Owner != state?.Self
+                                ? EnemyMode.Replica : EnemyMode.Native;
+                            game.SyncScene(correction, enemyMode);
+                        }
+                        else if (scene is null || state?.Shared?.Room is not { } activeRoom
+                            || activeRoom.Level != scene.Frame.Level || activeRoom.Owner == state.Self)
+                        {
+                            game.ResumeEnemies();
                         }
                     }
                     else { relay.Publish(local); }
@@ -131,7 +138,7 @@ internal sealed class Session
                 {
                     if (relay.World is not null)
                     {
-                        Volatile.Write(ref networkStatus, "Connected · 20 updates/sec");
+                        Volatile.Write(ref networkStatus, $"Connected · {NetRules.TickRate} updates/sec");
                         retrySeconds = 1;
                     }
                     await Task.WhenAny(connection, Task.Delay(250, token));

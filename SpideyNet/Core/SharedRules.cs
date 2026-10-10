@@ -9,6 +9,7 @@ public static class SharedRules
     public const int MaxMovers = 256;
     public const int MaxEnemies = EnemyPlan.NativeCount - 1;
     public const int MaxChanges = 64;
+    public const int EnemyFrameCount = 0x60;
 
     public static byte[] Normalize(ReadOnlySpan<byte> puzzles)
     {
@@ -50,7 +51,7 @@ public static class SharedRules
 
     public static bool Valid(EnemyState[]? enemies) => enemies is not null && enemies.Length <= MaxEnemies
         && enemies.All(enemy => enemy is not null && enemy.Mover is >= 0 and < MaxMovers
-            && enemy.X is >= -256 and <= 512 && enemy.Facing <= 7)
+            && enemy.X is >= -256 and <= 512 && enemy.Facing <= GameLayout.FacingMask && enemy.Pose < EnemyFrameCount)
         && enemies.Select(enemy => enemy.Mover).Distinct().Count() == enemies.Length;
 
     public static bool Valid(SharedReport report) => Valid(report.Seed) && Valid(report.Enemies)

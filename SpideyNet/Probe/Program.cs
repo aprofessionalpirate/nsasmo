@@ -3,6 +3,11 @@ using SpideyNet.Game;
 using SpideyNet.Core;
 
 const int ProbeSeconds = 30;
+if (args.Length == 2 && args[0] == "--enemy-still")
+{
+    await EnemyProbe.Run(int.Parse(args[1]));
+    return;
+}
 if (args.Length == 2 && args[0] == "--video")
 {
     await VideoProbe.Run(int.Parse(args[1]));
@@ -43,7 +48,7 @@ foreach (var process in processes)
                     game.Constrain(new PlayerState(Guid.NewGuid(), "Transition probe",
                         before.Frame with { X = 260 }, 1, ConstraintKind.Collision));
                 }
-                await Task.Delay(NetRules.TickMs, limit.Token);
+                await Task.Delay(NetRules.TickInterval, limit.Token);
             }
             Console.WriteLine($"Injected: {game.Inspect()}");
             if (game.Inspect().Frame?.Level == before.Frame.Level && game.Inspect().EnemyCount != before.EnemyCount)

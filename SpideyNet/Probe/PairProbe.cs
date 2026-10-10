@@ -42,9 +42,9 @@ internal static class PairProbe
         Task? secondTask = null;
         try
         {
-            while (first.World?.Shared?.Room is null) { await Task.Delay(NetRules.TickMs, stop.Token); }
+            while (first.World?.Shared?.Room is null) { await Task.Delay(NetRules.TickInterval, stop.Token); }
             secondTask = second.Run(endpoint, room, "Native second", InteractionMode.Disabled, stop.Token, SharedMode.Experimental);
-            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(NetRules.TickMs));
+            using var timer = new PeriodicTimer(NetRules.TickInterval);
             for (var tick = 0; tick <= FinishTick && await timer.WaitForNextTickAsync(stop.Token); tick++)
             {
                 if (tick is SwitchOnTick or SwitchOffTick)
@@ -130,7 +130,16 @@ internal static class PairProbe
         var scene = game.ReadScene() ?? throw new IOException("Game left the test room.");
         var world = relay.World;
         relay.Publish(scene.Frame, track.Capture(scene, world));
-        if (track.Accept(scene, world) is { } correction) { game.SyncScene(correction); }
+        if (track.Accept(scene, world) is { } correction)
+        {
+            game.SyncScene(correction, correction.Room is { } room && room.Owner != world?.Self
+                ? EnemyMode.Replica : EnemyMode.Native);
+        }
+        else if (world?.Shared?.Room is not { } activeRoom
+            || activeRoom.Level != scene.Frame.Level || activeRoom.Owner == world.Self)
+        {
+            game.ResumeEnemies();
+        }
         var guests = world?.Players.Where(player => player.Id != world.Self).Select(player => player.Frame).ToArray() ?? [];
         game.Render(guests, InjectionMode.Experimental);
         return scene.Events ?? [];
@@ -154,7 +163,7 @@ internal static class PairProbe
         {
             Update(firstGame, first, firstTrack);
             Update(secondGame, second, secondTrack);
-            await Task.Delay(NetRules.TickMs, token);
+            await Task.Delay(NetRules.TickInterval, token);
         }
         var initial = firstGame.ReadScene()!;
         var reset = SharedRules.Normalize(initial.Puzzles);
@@ -165,7 +174,7 @@ internal static class PairProbe
         {
             Update(firstGame, first, firstTrack);
             Update(secondGame, second, secondTrack);
-            await Task.Delay(NetRules.TickMs, token);
+            await Task.Delay(NetRules.TickInterval, token);
         }
         var before = secondGame.ReadScene()!;
         const SwitchState Expected = SwitchState.On;
@@ -180,7 +189,7 @@ internal static class PairProbe
         {
             Update(firstGame, first, firstTrack);
             observed.AddRange(Update(secondGame, second, secondTrack));
-            await Task.Delay(NetRules.TickMs, token);
+            await Task.Delay(NetRules.TickInterval, token);
         }
         if (!observed.Any(change => change.Index == ContactIndex)
             || SharedRules.Get(firstGame.ReadScene()!.Puzzles, ContactIndex) != Expected)
@@ -199,7 +208,7 @@ internal static class PairProbe
         {
             Update(firstGame, first, firstTrack);
             Update(secondGame, second, secondTrack);
-            await Task.Delay(NetRules.TickMs, token);
+            await Task.Delay(NetRules.TickInterval, token);
         }
         Console.WriteLine("Native follower contact reached both games.");
     }
@@ -220,7 +229,7 @@ internal static class PairProbe
         {
             Update(firstGame, first, firstTrack);
             Update(secondGame, second, secondTrack);
-            await Task.Delay(NetRules.TickMs, token);
+            await Task.Delay(NetRules.TickInterval, token);
         }
         if (secondGame.ReadScene()!.Enemies.Single(enemy => enemy.Mover == victim).Health != 0)
         {
@@ -233,7 +242,7 @@ internal static class PairProbe
             {
                 Update(firstGame, first, firstTrack);
                 Update(secondGame, second, secondTrack);
-                await Task.Delay(NetRules.TickMs, token);
+                await Task.Delay(NetRules.TickInterval, token);
             }
         }
         if (firstGame.Read()!.Level != Foyer || secondGame.Read()!.Level != Foyer

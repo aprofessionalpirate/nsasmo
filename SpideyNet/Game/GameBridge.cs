@@ -20,6 +20,7 @@ public sealed class GameBridge : IDisposable
     private byte ownedLevel;
     private ushort ownedCount;
     private SceneMemory? sceneMemory;
+    private EnemyLoop? enemyLoop;
 
     public GameBridge(int processId, CancellationToken token)
     {
@@ -52,13 +53,26 @@ public sealed class GameBridge : IDisposable
         return sceneMemory.Read(local, ReadCount());
     }
 
-    public void SyncScene(SharedState state)
+    public void SyncScene(SharedState state, EnemyMode mode = EnemyMode.Native)
     {
         using var pause = memory.Pause();
         var local = Read();
-        if (local is null || state.Room is not null && state.Room.Level != local.Level) { return; }
+        if (local is null || state.Room is not null && state.Room.Level != local.Level)
+        {
+            ResumeEnemies();
+            return;
+        }
         sceneMemory ??= new SceneMemory(memory, playerAddress - GameProfile.PlayerDataOffset, playerAddress);
         sceneMemory.Apply(state, ReadCount(), local);
+        enemyLoop ??= new EnemyLoop(memory, playerAddress - GameProfile.PlayerDataOffset);
+        enemyLoop.Set(state.Room is null ? EnemyMode.Native : mode);
+    }
+
+    public void ResumeEnemies()
+    {
+        if (enemyLoop is null) { return; }
+        using var pause = memory.Pause();
+        enemyLoop?.Set(EnemyMode.Native);
     }
 
     public SceneStatus? InspectScene()
@@ -157,7 +171,11 @@ public sealed class GameBridge : IDisposable
     public void Dispose()
     {
         try { Restore(); }
-        finally { memory.Dispose(); }
+        finally
+        {
+            try { ResumeEnemies(); }
+            finally { memory.Dispose(); }
+        }
     }
 
     private long SlotAddress() => playerAddress + EnemyPlan.FirstSlot * EnemyPlan.Stride;

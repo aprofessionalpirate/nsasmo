@@ -50,6 +50,10 @@ public sealed class RelayClient
         {
             await await Task.WhenAny(send, receive);
         }
+        catch (Exception) when (token.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(token);
+        }
         finally
         {
             lifetime.Cancel();
@@ -62,7 +66,7 @@ public sealed class RelayClient
 
     private async Task SendLoop(ClientWebSocket socket, CancellationToken token)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(NetRules.TickMs));
+        using var timer = new PeriodicTimer(NetRules.TickInterval);
         long sequence = 0;
         while (await timer.WaitForNextTickAsync(token))
         {

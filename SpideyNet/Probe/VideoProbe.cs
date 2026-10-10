@@ -27,7 +27,7 @@ internal static class VideoProbe
             {
                 throw new InvalidOperationException("Moving scenery did not repaint graphics and collision tiles.");
             }
-            Console.WriteLine($"{changed.Video}: guest rendered; scenery and background changed.");
+            Console.WriteLine($"{changed.Video}: guest injection active; scenery and background changed.");
             await Task.Delay(TimeSpan.FromSeconds(DisplaySeconds), stop.Token);
         }
         finally

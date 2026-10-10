@@ -2,7 +2,7 @@ namespace SpideyNet.Core;
 
 public sealed class RemoteTrack
 {
-    private const int DelayMs = NetRules.TickMs * 2;
+    private const double DelayMs = NetRules.TickMs * 2;
     private const int MaxSamples = 6;
     private const int SnapDistance = 48;
     private readonly Queue<(long Time, GameFrame Frame)> samples = new();

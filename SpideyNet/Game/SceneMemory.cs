@@ -28,7 +28,8 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
         var actors = Actors(count);
         var enemies = actors.Select(actor => new EnemyState(Mover(actor.Data),
             BinaryPrimitives.ReadInt16LittleEndian(actor.Data.AsSpan(GameLayout.XOffset)),
-            actor.Data[GameLayout.YOffset], actor.Data[GameLayout.FacingOffset], actor.Data[GameLayout.HealthOffset])).ToArray();
+            actor.Data[GameLayout.YOffset], actor.Data[GameLayout.FacingOffset], actor.Data[GameLayout.HealthOffset],
+            actor.Data[GameLayout.CharacterOffset])).ToArray();
         if (!SharedRules.Valid(enemies)) { throw new IOException("Unsupported native enemy state."); }
         var puzzles = memory.Read(dataAddress + PuzzleOffset, SharedRules.PuzzleBytes);
         return new GameScene(frame, puzzles, enemies, movers.Read(count).Select(shape => shape.State).ToArray(),
@@ -76,6 +77,7 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
             position[3] = enemy.Facing;
             patches.Add((actor.Address + GameLayout.XOffset, position));
             patches.Add((actor.Address + GameLayout.HealthOffset, [enemy.Health]));
+            patches.Add((actor.Address + GameLayout.CharacterOffset, [enemy.Pose]));
 
             // Move collision bounds with the actor; keep prior draw coordinates local.
             var dx = enemy.X - BinaryPrimitives.ReadInt16LittleEndian(local.AsSpan(GameLayout.XOffset));

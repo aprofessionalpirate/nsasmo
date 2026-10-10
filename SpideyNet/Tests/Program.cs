@@ -13,6 +13,7 @@ data[4] = 147;
 data[6] = 0x12;
 
 Check(() => GameLayout.Decode(data, 2)?.X == -8, "Signed offscreen coordinate");
+Check(() => GameLayout.Decode(data, 2)?.Pose == data[GameLayout.CharacterOffset], "Publish the rendered animation frame");
 Check(() => GameLayout.Decode(data, 0) is null, "Reject menu/dead zone");
 Check(() => GameLayout.Decode(data, 64) is null, "Reject unknown room");
 Check(() => GameLayout.Decode(data.AsSpan(0, 12), 2) is null, "Reject partial read");
@@ -25,11 +26,16 @@ data[39] = 0xC0;
 data[31] = 0x98;
 data[32] = 0x92;
 var source = data.ToArray();
-var guest = new GameFrame(2, 96, 147, 2, 0xAA);
+const byte StandingPose = 0x18;
+var guest = new GameFrame(2, 96, 147, 2, StandingPose);
+Check(() => NetRules.Valid(guest with { Facing = 4 }), "Publish upside-down player poses");
+Check(() => !NetRules.Valid(guest with { Facing = GameLayout.FacingMask + 1 }), "Reject unknown facing bits");
 const ushort GuestDescriptor = 0x9509;
 var actor = EnemyPlan.Build(data, guest, GuestDescriptor);
 Check(() => actor.Length == EnemyPlan.Stride, "Bounded enemy record");
 Check(() => actor[1] == 0, "Do not copy local input");
+Check(() => actor[GameLayout.CharacterOffset] == StandingPose, "Guest animation follows the remote player");
+Check(() => !NetRules.Valid(guest with { Pose = GameLayout.HiddenCharacter }), "Reject non-player sprite frames");
 Check(() => actor[19] == data[19], "Use local sprite references");
 Check(() => System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(actor.AsSpan(31)) == GuestDescriptor,
     "Use a separate valid actor descriptor");
@@ -40,11 +46,14 @@ Check(() => EnemyPlan.Build(data, null, GuestDescriptor)[6] == 0x5F, "Hide absen
 Check(() => EnemyPlan.MaxGuests * EnemyPlan.DescriptorSize <= (EnemyPlan.Capacity - EnemyPlan.DescriptorSlot) * EnemyPlan.Stride,
     "Descriptors fit outside the active actor range");
 Check(() => RenderPatch.Build(12).SequenceEqual(new byte[] { 0xB9, 12, 0, 0x90 }), "Patch only the renderer count instruction");
+Check(() => Math.Abs(NetRules.TickMs - 1000d / 60) < 0.001, "Target sixty updates per second");
+Check(() => NetRules.MaxRate >= 60 * 2, "Allow sixty updates with burst headroom");
 
 var track = new RemoteTrack();
 track.Add(guest with { X = 0 }, 1000);
 track.Add(guest with { X = 20 }, 1100);
-Check(() => track.Sample(1150)?.X == 10, "Interpolate between buffered samples");
+var sampleTime = (long)Math.Round(1050 + NetRules.TickMs * 2);
+Check(() => track.Sample(sampleTime)?.X == 10, "Interpolate between buffered samples");
 Check(() => track.Sample(4000) is null, "Expire disconnected players");
 track.Add(guest with { Level = 3, X = 100 }, 4100);
 Check(() => track.Sample(4100)?.X == 100, "Snap across rooms");

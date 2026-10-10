@@ -20,6 +20,16 @@ Text marker `Mary Jane is DEAD!` ends at DS:`0x92B1`, the actor start.
 | Health | actor +39 |
 | Attack fields | actor +48 / +49 |
 
+VGA CS:`0x34E1` and CGA CS:`0x36CE` read actor +6 as the sprite frame.
+Actor +19 is an animation-script pointer, not a frame. Protocol 3 sends actor
++6 in `Pose`; guest records apply that byte while keeping local pointers.
+Facing uses three renderer bits: axis swap, horizontal flip and vertical flip.
+Value 4 is the ceiling pose. Rejecting it removed hanging players from snapshots.
+
+Native web lines use DS:`0x9658`/`0x965A` for the endpoint and
+DS:`0x965C`/`0x965E` for the origin. Actor +17 bit 1 enables drawing.
+CS:`0x3944` draws the clipped line in VGA/CGA. These records are not yet shared.
+
 The actor loop uses BP at actor +1:
 
 ```asm
@@ -104,3 +114,16 @@ of four planes. Each plane contains 176 rows of 32 bytes (`0x1600` bytes).
 The complete backing buffer is `0x5800` bytes. CS:`0x3242` copies these planes
 to video memory with sequencer masks 8, 4, 2, 1. External corrections repaint
 the backing buffer using the same layout; the native renderer handles VRAM.
+
+# Follower enemy AI
+
+CS:`0x373` loads DS:`0x928B` into CX for the AI loop. Its calls at `0x38B`
+and `0x38E` update input, animation and movement. Followers replace only this
+instruction with `MOV CX,1; NOP`, leaving the local player active. Other loops
+retain the native actor count. Ownership transfer and disconnect restore it.
+Enemy character byte +6 is replicated with position; local graphics pointers
+and prior draw coordinates remain local.
+
+The isolated regression failed before this patch: X207 became X217 without
+an owner update. Afterward X185 remained X185; restoring native AI moved it
+to X193. The actor count stayed unchanged.

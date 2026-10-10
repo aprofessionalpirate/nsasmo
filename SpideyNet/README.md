@@ -27,7 +27,9 @@ interaction and enemies/puzzles settings. Each runs their own DOSBox instance.
 
 `Experimental` injects native actors. `Observe` only sends locations.
 Up to eight players share a room; guests appear only in the same game room.
-Remote actors currently use the local player's animation references.
+Remote actors use their own sprite frames and this process's graphics assets.
+Independent standing/walking animations and ceiling poses were verified in two
+VGA games. Native web lines are not yet synchronized.
 
 ## Internet play
 
@@ -41,7 +43,8 @@ Share it privately. Avoid logging `/play` query strings at the reverse proxy.
 Use a dedicated relay for trusted players; this is not an account or
 competitive anti-cheat system. Deploy one relay instance: rooms live in memory.
 
-The relay sends snapshots at 20 Hz. Each connection has one receive worker
+The relay and clients target 60 Hz. Interpolation buffers two updates (about
+33 ms). Each connection has one receive worker
 and one send worker, a one-snapshot outbox, message/rate limits, keepalive
 deadlines, and a room cap. Clients reconnect with bounded backoff, expire stale
 players and interpolate positions with a 100 ms delay. WebSocket/TCP favors
@@ -64,13 +67,15 @@ DOS simulation remain independent.
 
 Choose `Experimental` under **Enemies/puzzles** on every client. This requires
 experimental rendering. Choose `Independent` for the previous behavior or Observe.
-Client and relay must both use protocol version 2; replace older published builds.
+Client and relay must both use protocol version 4; replace older published builds.
 
 The first active player in each game room owns enemy movement. Other players
-receive position, facing, health and death updates. Hits from any player reduce
+receive position, facing, animation, health and death updates. Hits from any player reduce
 shared health. Leaving or disconnecting transfers ownership and retains the
-room's cached enemy state. Enemy AI still runs locally between corrections;
-animation and movement can jitter. Healing and scripted respawns are not modeled.
+room's cached enemy state. Followers skip native enemy AI and display the owner's
+state. Local player AI, collision and puzzle loops remain active. Native enemy AI
+resumes on ownership transfer, lost connection or disconnect. Healing and scripted
+respawns are not modeled.
 
 Switch states are shared globally, including reversible switches and changes
 made in other rooms. Native dirty bits trigger local scripts to update doors,
@@ -78,7 +83,7 @@ tiles and scripted effects. Pending changes retry until acknowledged; a joining
 player adopts the session's state rather than replacing it.
 One player per room reports script results. Followers report native contact/web
 latches, preventing replicated scripts from feeding their effects back as input.
-Input latches are sampled at 20 Hz; brief events can be missed. Every puzzle and
+Input latches are sampled at 60 Hz; brief events can be missed. Every puzzle and
 scripted interaction across all 63 rooms has not been verified.
 
 Moving scenery has separate ownership. A player standing on an object can drive
@@ -99,8 +104,8 @@ The apparent two-byte enemy headers are the previous actor's attack fields.
 Actor indexes 5–11 hold guests; 12–16 provide private scratch storage.
 Earlier indexes retain their shared web data.
 
-Only the draw loop's count instruction is patched. Physics, enemy AI and
-room scripts retain their original count. Guests receive separate inactive
+The draw loop includes guest slots. Followers restrict the AI loop to the local
+player; physics and room scripts retain their original count. Guests receive separate inactive
 descriptors. A complete renderer signature and a supported video mode are required.
 
 DOSBox threads are briefly suspended during writes and resumed in cleanup.
@@ -108,7 +113,7 @@ Disconnect restores the instruction and reserved bytes. Room transitions
 restore the instruction and discard old-room backups. Unexpected count changes
 stop injection. Process suspension does not select an emulator frame boundary.
 
-Only domain state crosses the network: player/enemy coordinates, health, switch
+Only domain state crosses the network: player/enemy coordinates, animation, health, switch
 states, moving object identities and commands. Process-local sprite references
 and moving object graphics come from local assets. Remote memory addresses and
 raw actor records are never accepted.
@@ -122,7 +127,7 @@ bounded chunks from an x64 client. Live verification covers 32-bit DOSBox 0.74-3
 does not choose a frame boundary. Abruptly killing the client during suspension
 can leave DOSBox paused; a killed client cannot restore the renderer patch.
 Restart DOSBox after an abnormal exit. An emulator frame hook is the next step
-for stronger guarantees. Other builds, VGA/EGA modes and dynamic cores are unverified.
+for stronger guarantees. Other builds, EGA/Tandy modes and dynamic cores are unverified.
 
 ## Validate
 
@@ -163,8 +168,9 @@ grids, follower switch contact, switch changes, follower damage, enemy death
 and Midnight-to-Foyer handoff. Both renderer instructions were restored.
 Other rooms, simultaneous human riders and long sessions remain unverified.
 
-VGA verification rendered a guest and displaced Midnight's helicopter. Collision
-tiles, all four background planes, actor storage and the renderer restored exactly.
+VGA checks displayed a second Spider-Man and displaced Midnight's helicopter.
+Collision tiles, all four background planes, actor storage and the renderer restored
+exactly. Long VGA sessions remain unverified.
 
 Initial live verification used DOSBox 0.74-3 and a CGA `SPIDEY.EXE` with SHA-256
 `0695C840053C920BF198FA203AE64F8A028AA28EA186351AFA0AD4DE9EFD93F0`.

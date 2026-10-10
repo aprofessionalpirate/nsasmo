@@ -2,6 +2,7 @@ using SpideyNet.Core;
 
 internal static class SharedChecks
 {
+    private const byte StandingPose = 0x18;
     internal static void Run()
     {
         var initial = new byte[SharedRules.PuzzleBytes];
@@ -15,8 +16,15 @@ internal static class SharedChecks
         Check(() => SharedRules.Apply(patch, initial)[0] == 0x22, "Reversible switch marks native scripts dirty");
         Check(() => !SharedRules.Valid([new EnemyState(SharedRules.MaxMovers, 0, 0, 0, 1)]), "Reject remote mover addresses");
         var enemy = new EnemyState(3, 100, 100, 0, 192);
+        var badPose = System.Text.Json.JsonSerializer.Deserialize<EnemyState>(
+            "{\"Mover\":3,\"X\":100,\"Y\":100,\"Facing\":0,\"Health\":192,\"Pose\":255}")!;
+        Check(() => !SharedRules.Valid([badPose]), "Reject unknown enemy animation frames");
+        var animated = enemy with { Pose = StandingPose };
+        var encoded = System.Text.Json.JsonSerializer.Serialize(animated);
+        Check(() => System.Text.Json.JsonSerializer.Deserialize<EnemyState>(encoded) == animated,
+            "Preserve enemy animation over the wire");
         Check(() => !SharedRules.Valid([enemy, enemy]), "Reject duplicate native identities");
-        var frame = new GameFrame(1, 10, 100, 0, 94);
+        var frame = new GameFrame(1, 10, 100, 0, StandingPose);
         var scene = new GameScene(frame, initial, [enemy], []);
         var self = Guid.NewGuid();
         var room = new RoomState(1, Guid.NewGuid(), 1, [enemy], []);

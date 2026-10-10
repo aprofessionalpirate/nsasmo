@@ -70,7 +70,7 @@ app.Map(NetRules.SocketPath, async context =>
 using var shutdown = new CancellationTokenSource();
 var broadcast = Task.Run(async () =>
 {
-    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(NetRules.TickMs));
+    using var timer = new PeriodicTimer(NetRules.TickInterval);
     try
     {
         while (await timer.WaitForNextTickAsync(shutdown.Token))

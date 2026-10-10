@@ -3,6 +3,7 @@ using SpideyNet.Transport;
 
 internal static class SharedSocketChecks
 {
+    private const byte StandingPose = 0x18;
     internal static async Task Run(Uri endpoint)
     {
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -10,7 +11,7 @@ internal static class SharedSocketChecks
         var key = Guid.NewGuid().ToString("N");
         var first = new RelayClient();
         var second = new RelayClient();
-        var frame = new GameFrame(1, 10, 100, 0, 94);
+        var frame = new GameFrame(1, 10, 100, 0, StandingPose);
         var seed = new byte[SharedRules.PuzzleBytes];
         var enemy = new EnemyState(3, 100, 100, 0, 192);
         var helicopter = new MoverState(0, 0, 0, 0, 8, 15, 6, 2);

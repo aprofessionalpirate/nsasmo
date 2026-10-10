@@ -51,6 +51,7 @@ public static class EnemyPlan
         BinaryPrimitives.WriteInt16LittleEndian(actor[GameLayout.XOffset..], remote.X);
         actor[GameLayout.YOffset] = remote.Y;
         actor[GameLayout.FacingOffset] = remote.Facing;
+        actor[GameLayout.CharacterOffset] = remote.Pose;
         var dx = remote.X - BinaryPrimitives.ReadInt16LittleEndian(local[GameLayout.XOffset..]);
         var dy = remote.Y - local[GameLayout.YOffset];
         foreach (var index in new[] { GameLayout.BoundsLeftOffset, GameLayout.BoundsRightOffset, GameLayout.PreviousXOffset })

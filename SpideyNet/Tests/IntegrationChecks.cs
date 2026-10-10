@@ -5,6 +5,10 @@ using SpideyNet.Transport;
 
 internal static class IntegrationChecks
 {
+    private const int MinSnapshotRate = 45;
+    private const int MaxSnapshotRate = 75;
+    private const byte StandingPose = 0x18;
+    private const byte CrouchingPose = 0x12;
     internal static async Task Run(Uri endpoint)
     {
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -12,7 +16,7 @@ internal static class IntegrationChecks
         var first = new RelayClient();
         var second = new RelayClient();
         var isolated = new RelayClient();
-        var source = new GameFrame(2, 40, 100, 0, 94);
+        var source = new GameFrame(2, 40, 100, 0, StandingPose);
         first.Publish(source);
         second.Publish(source with { X = 80 });
         isolated.Publish(source);
@@ -27,6 +31,13 @@ internal static class IntegrationChecks
             await Until(() => first.World?.Players.Length == 2 && second.World?.Players.Length == 2, stop.Token);
             await Until(() => isolated.World?.Players.Length == 1, stop.Token);
             Check(() => first.World!.Self != second.World!.Self, "Relay assigns distinct identities");
+            const byte CeilingFacing = 4;
+            first.Publish(source with { Pose = CrouchingPose, Facing = CeilingFacing });
+            await Until(() => second.World?.Players.Any(p => p.Id == first.World!.Self
+                && p.Frame.Pose == CrouchingPose && p.Frame.Facing == CeilingFacing) == true, stop.Token);
+            Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.Pose == StandingPose,
+                "Player animations remain independent");
+            first.Publish(source);
             first.FireWeb();
             await Until(() => second.World?.Players.Any(p => p.Id == second.World.Self
                 && p.Constraint == ConstraintKind.Frozen) == true, stop.Token);
@@ -46,6 +57,10 @@ internal static class IntegrationChecks
             await RejectCheck(endpoint, [0], WebSocketMessageType.Binary, stop.Token);
             var invalid = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1, source with { Level = 0 }));
             await RejectCheck(endpoint, invalid, WebSocketMessageType.Text, stop.Token);
+            var invalidPose = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
+                source with { Pose = GameLayout.HiddenCharacter }));
+            await RejectCheck(endpoint, invalidPose, WebSocketMessageType.Text, stop.Token);
+            await CadenceCheck(endpoint, stop.Token);
             Console.WriteLine("Relay checks: identities, room isolation, web freeze, expiry, collision, fragmentation, capacity, malformed/oversized/binary/invalid-room rejection.");
         }
         finally
@@ -70,11 +85,35 @@ internal static class IntegrationChecks
         catch (WebSocketException) { }
     }
 
+    private static async Task CadenceCheck(Uri endpoint, CancellationToken token)
+    {
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(Address(endpoint, Guid.NewGuid().ToString("N")), token);
+        var first = await Wire.Receive<WorldState>(socket, token)
+            ?? throw new InvalidOperationException("Relay closed during cadence test.");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var last = first;
+        var received = 0;
+        while (clock.ElapsedMilliseconds < NetRules.RateWindowMs)
+        {
+            last = await Wire.Receive<WorldState>(socket, token)
+                ?? throw new InvalidOperationException("Relay closed during cadence test.");
+            received++;
+        }
+
+        // Allow scheduler jitter; count delivered snapshots rather than timer settings.
+        var rate = received / clock.Elapsed.TotalSeconds;
+        Check(() => rate >= MinSnapshotRate && rate <= MaxSnapshotRate && last.Tick > first.Tick,
+            "Relay delivers snapshots near sixty hertz");
+        Console.WriteLine($"Relay snapshot rate: {rate:F1}/sec.");
+        socket.Abort();
+    }
+
     private static async Task FragmentCheck(Uri endpoint, CancellationToken token)
     {
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(Address(endpoint, Guid.NewGuid().ToString("N")), token);
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1, new GameFrame(2, 80, 100, 0, 94)));
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1, new GameFrame(2, 80, 100, 0, StandingPose)));
         var middle = bytes.Length / 2;
         await socket.SendAsync(bytes.AsMemory(0, middle), WebSocketMessageType.Text, WebSocketMessageFlags.None, token);
         await socket.SendAsync(bytes.AsMemory(middle), WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, token);

@@ -112,3 +112,25 @@ The ownership label previously received two different text assignments every UI
 tick. It now receives its complete text once. Protocol 5 includes bounded native
 web geometry and held input. The relay optionally attaches hit webs to players
 and applies a bounded pull to the shooter; room departure and release detach.
+
+## Thread-lifetime failure during web pulling
+
+The reported client stopped with Windows error 87 ("The parameter is incorrect").
+The old pause driver enumerated DOSBox threads, then opened and suspended each
+one. A thread could exit between those steps, failing the whole transaction.
+It also retrieved the native error after disposing a handle, risking lost error
+context. The old client did not save exception stacks, so the exact originating
+call for the reported incident cannot be recovered.
+
+An isolated process that rapidly creates and exits threads reproduced the pause
+failure: the old driver failed 206 of 300 cycles, with SuspendThread errors.
+The corrected driver holds thread handles, verifies process ownership, and skips
+only threads confirmed to have exited. Failed suspension allows up to 10 ms for
+kernel teardown to complete; genuine access/suspension failures still abort before
+memory writes. Already suspended threads are resumed during cleanup.
+
+The corrected driver passed 3000 pause/resume cycles with zero failures. A live
+Midnight game passed 30 pull/render/release cycles with renderer, reserved guest
+storage and native web state restored. This uses synthetic authorized pull frames,
+not a physical Space press. Client failures now log full exceptions and native
+operation names for any recurrence.

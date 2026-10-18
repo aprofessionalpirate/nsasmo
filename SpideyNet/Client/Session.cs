@@ -136,6 +136,7 @@ internal sealed class Session
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
         {
+            SessionDiagnostics.Record(error, processId);
             Volatile.Write(ref view, new SessionView($"Stopped: {error.Message}", "", null, []));
         }
         finally
@@ -145,6 +146,7 @@ internal sealed class Session
             try { await network; }
             catch (Exception error)
             {
+                SessionDiagnostics.Record(error, processId);
                 Volatile.Write(ref view, new SessionView($"Stopped: {error.Message}", "", null, []));
             }
         }

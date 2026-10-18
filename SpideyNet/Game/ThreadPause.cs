@@ -8,6 +8,10 @@ namespace SpideyNet.Game;
 internal sealed class ThreadPause : IDisposable
 {
     private const uint SuspendAccess = 0x0002;
+    private const uint QueryAccess = 0x0800;
+    private const uint SynchronizeAccess = 0x00100000;
+    private const int InvalidParameter = 87;
+    private const uint Signaled = 0;
     private const uint Failed = uint.MaxValue;
     private readonly List<SafeWaitHandle> threads = [];
 
@@ -20,17 +24,68 @@ internal sealed class ThreadPause : IDisposable
             {
                 using (thread)
                 {
-                    var handle = OpenThread(SuspendAccess, 0, thread.Id);
-                    if (handle.IsInvalid || SuspendThread(handle) == Failed)
+                    var handle = OpenThread(SuspendAccess | QueryAccess | SynchronizeAccess, 0, thread.Id);
+                    if (handle.IsInvalid)
+                    {
+                        var error = Marshal.GetLastWin32Error();
+                        handle.Dispose();
+                        // A thread can exit after Process.Threads takes its snapshot.
+                        if (error == InvalidParameter && !ContainsThread(process, thread.Id))
+                        {
+                            continue;
+                        }
+
+                        throw new Win32Exception(error, $"OpenThread({thread.Id}): {new Win32Exception(error).Message}");
+                    }
+
+                    // Hold the handle and verify its owner before suspension; IDs can be reused.
+                    var owner = GetProcessIdOfThread(handle);
+                    if (owner == 0)
+                    {
+                        var error = Marshal.GetLastWin32Error();
+                        handle.Dispose();
+                        throw new Win32Exception(error, $"GetProcessIdOfThread({thread.Id}): {new Win32Exception(error).Message}");
+                    }
+
+                    if (owner != processId || WaitForSingleObject(handle, 0) == Signaled)
                     {
                         handle.Dispose();
-                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                        continue;
+                    }
+
+                    if (SuspendThread(handle) == Failed)
+                    {
+                        var error = Marshal.GetLastWin32Error();
+                        // Kernel teardown may finish just after suspension reports failure.
+                        var exited = WaitForSingleObject(handle, 10) == Signaled;
+                        handle.Dispose();
+                        if (exited)
+                        {
+                            continue;
+                        }
+
+                        throw new Win32Exception(error, $"SuspendThread({thread.Id}): {new Win32Exception(error).Message}");
                     }
                     threads.Add(handle);
                 }
             }
         }
         catch { Dispose(); throw; }
+    }
+
+    private static bool ContainsThread(Process process, int threadId)
+    {
+        process.Refresh();
+        var found = false;
+        foreach (ProcessThread current in process.Threads)
+        {
+            using (current)
+            {
+                found |= current.Id == threadId;
+            }
+        }
+
+        return found;
     }
 
     public void Dispose()
@@ -46,6 +101,12 @@ internal sealed class ThreadPause : IDisposable
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern SafeWaitHandle OpenThread(uint access, int inherit, int threadId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetProcessIdOfThread(SafeWaitHandle thread);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForSingleObject(SafeWaitHandle handle, uint milliseconds);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern uint SuspendThread(SafeWaitHandle thread);

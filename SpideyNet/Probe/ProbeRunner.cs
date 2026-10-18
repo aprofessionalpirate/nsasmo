@@ -8,15 +8,27 @@ internal static class ProbeRunner
 {
     internal static async Task RunAsync(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--pause-race")
+        {
+            await PauseRaceProbe.RunAsync();
+            return;
+        }
+
+        if (args.Length == 1 && args[0] == "--thread-churn-worker")
+        {
+            PauseRaceProbe.RunWorker();
+            return;
+        }
+
         if (args.Length == 2 && args[0] == "--inactive")
         {
             await InactiveProbe.RunAsync(int.Parse(args[1]));
             return;
         }
 
-        if (args.Length == 2 && args[0] == "--web")
+        if (args.Length == 2 && args[0] is "--web" or "--web-stress")
         {
-            await WebProbe.RunAsync(int.Parse(args[1]));
+            await WebProbe.RunAsync(int.Parse(args[1]), args[0] == "--web-stress");
             return;
         }
 

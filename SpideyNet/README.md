@@ -173,6 +173,10 @@ dotnet run --project Probe --no-build -- --session-reconnect ws://localhost:5080
 dotnet run --project Probe --no-build -- --session-reentry ws://localhost:5080 <first-id> <second-id>
 # Native web-coordinate round trip and tether cleanup, in Midnight:
 dotnet run --project Probe --no-build -- --web <process-id>
+# Repeated pull/render/release checks; disconnect that game's client first:
+dotnet run --project Probe --no-build -- --web-stress <process-id>
+# Isolated thread-lifetime regression; no game needed:
+dotnet run --project Probe --no-build -- --pause-race
 # Stabilize already defeated actors and check native wrapping after detach:
 dotnet run --project Probe --no-build -- --inactive <process-id>
 # With two desktop clients using Experimental interactions and shared scenes:
@@ -184,6 +188,9 @@ The session probes compile the production session service directly, keeping its
 internal visibility. Live coverage and remaining checks are recorded in [TESTING.md](TESTING.md).
 Run Probe from a terminal to see its output. It returns exit code 0 on success,
 1 on failure, and 2 on timeout/cancellation. Failures print to stderr after cleanup.
+Client session failures also write full exceptions to
+`%LOCALAPPDATA%\SpideyNet\client-<process-id>.log`. Native thread errors identify
+the failed operation. Logs omit room keys and network traffic.
 
 Tests cover record validation, signed coordinates, actor construction,
 interpolation, expiry, player crossing and web range. Relay checks use real sockets

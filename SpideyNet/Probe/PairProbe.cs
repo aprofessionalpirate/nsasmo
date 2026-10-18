@@ -12,7 +12,7 @@ internal static class PairProbe
     private const int RaiseTick = 40;
     private const int LowerTick = 160;
 
-    internal static async Task Run(Uri endpoint, int firstId, int secondId, PairMode mode)
+    internal static async Task RunAsync(Uri endpoint, int firstId, int secondId, PairMode mode)
     {
         if (firstId == secondId) { throw new ArgumentException("Choose two distinct DOSBox processes."); }
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(LimitSeconds));
@@ -98,7 +98,7 @@ internal static class PairProbe
             }
             if (mode == PairMode.Contact)
             {
-                await Contact(firstGame, secondGame, first, second, firstTrack, secondTrack, stop.Token);
+                await ContactAsync(firstGame, secondGame, first, second, firstTrack, secondTrack, stop.Token);
             }
             if (mode == PairMode.Transition)
             {
@@ -127,13 +127,20 @@ internal static class PairProbe
 
     private static PuzzleChange[] Update(GameBridge game, RelayClient relay, SharedTrack track)
     {
-        var scene = game.ReadScene() ?? throw new IOException("Game left the test room.");
+        var scene = game.ReadScene();
+        if (scene is null)
+        {
+            relay.Publish(null);
+            game.ResumeEnemies();
+            game.Render([], InjectionMode.Experimental);
+            return [];
+        }
         var world = relay.World;
         relay.Publish(scene.Frame, track.Capture(scene, world));
         if (track.Accept(scene, world) is { } correction)
         {
             game.SyncScene(correction, correction.Room is { } room && room.Owner != world?.Self
-                ? EnemyMode.Replica : EnemyMode.Native);
+                ? EnemyMode.Replica : EnemyMode.Native, world?.Self);
         }
         else if (world?.Shared?.Room is not { } activeRoom
             || activeRoom.Level != scene.Frame.Level || activeRoom.Owner == world.Self)
@@ -145,19 +152,19 @@ internal static class PairProbe
         return scene.Events ?? [];
     }
 
-    private static async Task Contact(GameBridge firstGame, GameBridge secondGame, RelayClient first, RelayClient second,
+    private static async Task ContactAsync(GameBridge firstGame, GameBridge secondGame, RelayClient first, RelayClient second,
         SharedTrack firstTrack, SharedTrack secondTrack, CancellationToken token)
     {
         const int ContactIndex = 4;
         const int StopIndex = 5;
-        const short ContactX = 67;
+        const short ContactX = 75;
         const byte ContactY = 100;
         const short GroundX = 11;
         const byte GroundY = 147;
         foreach (var game in new[] { firstGame, secondGame })
         {
             game.Constrain(new PlayerState(Guid.Empty, "Contact probe", game.Read()! with { X = GroundX, Y = GroundY },
-                1, ConstraintKind.Collision));
+                1, ConstraintKind.Position));
         }
         for (var tick = 0; tick < 10; tick++)
         {
@@ -183,7 +190,7 @@ internal static class PairProbe
             throw new InvalidOperationException("One-shot contact fixture did not reset.");
         }
         secondGame.Constrain(new PlayerState(Guid.Empty, "Contact probe", before.Frame with { X = ContactX, Y = ContactY },
-            1, ConstraintKind.Collision));
+            1, ConstraintKind.Position));
         var observed = new List<PuzzleChange>();
         for (var tick = 0; tick < 40; tick++)
         {
@@ -198,7 +205,7 @@ internal static class PairProbe
                 + $"expected {Expected}, first {SharedRules.Get(firstGame.ReadScene()!.Puzzles, ContactIndex)}, "
                 + $"second {SharedRules.Get(secondGame.ReadScene()!.Puzzles, ContactIndex)}, frame {secondGame.Read()}.");
         }
-        secondGame.Constrain(new PlayerState(Guid.Empty, "Contact probe", before.Frame, 1, ConstraintKind.Collision));
+        secondGame.Constrain(new PlayerState(Guid.Empty, "Contact probe", before.Frame, 1, ConstraintKind.Position));
         var driver = first.World!.Shared!.Room!.Movers[0].Owner == first.World.Self ? firstGame : secondGame;
         var stopped = driver.ReadScene()!;
         driver.SyncScene(new SharedState(SharedRules.Normalize(stopped.Puzzles),
@@ -237,7 +244,7 @@ internal static class PairProbe
         }
         foreach (var game in new[] { firstGame, secondGame })
         {
-            game.Constrain(new PlayerState(Guid.Empty, "Transition probe", game.Read()! with { X = ExitX }, 1, ConstraintKind.Collision));
+            game.Constrain(new PlayerState(Guid.Empty, "Transition probe", game.Read()! with { X = ExitX }, 1, ConstraintKind.Position));
             for (var tick = 0; tick < 20; tick++)
             {
                 Update(firstGame, first, firstTrack);

@@ -11,6 +11,7 @@ internal sealed class Session
     private readonly RelayClient relay = new();
     private CancellationTokenSource? lifetime;
     private Task? running;
+    private Task? stopping;
     private SessionView view = new("Disconnected", "", null, []);
     private string networkStatus = "Connecting";
 
@@ -20,21 +21,42 @@ internal sealed class Session
         SharedMode shared)
     {
         if (running is not null) { throw new InvalidOperationException("Disconnect first."); }
+        stopping = null;
         lifetime = new CancellationTokenSource();
         running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, lifetime.Token);
     }
 
     internal void FireWeb() => relay.FireWeb();
 
-    internal async Task DisconnectAsync()
+    internal Task DisconnectAsync()
     {
-        if (lifetime is null) { return; }
-        lifetime.Cancel();
-        if (running is not null) { await running; }
-        lifetime.Dispose();
-        lifetime = null;
-        running = null;
-        Volatile.Write(ref view, new SessionView("Disconnected", "", null, []));
+        // Double clicks and form closing must await the same restoration work.
+        return stopping ??= StopAsync();
+    }
+
+    private async Task StopAsync()
+    {
+        var cancellation = lifetime;
+        if (cancellation is null)
+        {
+            return;
+        }
+
+        cancellation.Cancel();
+        try
+        {
+            if (running is not null)
+            {
+                await running;
+            }
+        }
+        finally
+        {
+            cancellation.Dispose();
+            lifetime = null;
+            running = null;
+            Volatile.Write(ref view, new SessionView("Disconnected", "", null, []));
+        }
     }
 
     private async Task RunAsync(int processId, Uri endpoint, string room, string name,
@@ -48,7 +70,7 @@ internal sealed class Session
             await Task.Run(async () =>
             {
                 using var game = new GameBridge(processId, linked.Token);
-                using var timer = new PeriodicTimer(NetRules.TickInterval);
+                using var timer = new PeriodicTimer(NetRules.LocalTickInterval);
                 var tracks = new Dictionary<Guid, RemoteTrack>();
                 var sceneTrack = new SharedTrack();
                 WorldState? lastState = null;
@@ -68,7 +90,7 @@ internal sealed class Session
                         {
                             var enemyMode = correction.Room is { } roomState && roomState.Owner != state?.Self
                                 ? EnemyMode.Replica : EnemyMode.Native;
-                            game.SyncScene(correction, enemyMode);
+                            game.SyncScene(correction, enemyMode, state?.Self);
                         }
                         else if (scene is null || state?.Shared?.Room is not { } activeRoom
                             || activeRoom.Level != scene.Frame.Level || activeRoom.Owner == state.Self)

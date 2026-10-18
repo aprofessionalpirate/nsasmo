@@ -1,73 +1,19 @@
-using System.Diagnostics;
-using SpideyNet.Game;
-using SpideyNet.Core;
+using SpideyNet.Probe;
 
-const int ProbeSeconds = 30;
-if (args.Length == 2 && args[0] == "--enemy-still")
+try
 {
-    await EnemyProbe.Run(int.Parse(args[1]));
-    return;
+    // Let probe workers unwind and restore game patches before reporting failure.
+    await ProbeRunner.RunAsync(args);
+    return Environment.ExitCode;
 }
-if (args.Length == 2 && args[0] == "--video")
+catch (OperationCanceledException)
 {
-    await VideoProbe.Run(int.Parse(args[1]));
-    return;
+    Console.Error.WriteLine("Probe timed out or was cancelled. Check the required games, relay and expected input.");
+    return 2;
 }
-if (args.Length == 4 && args[0] is "--pair" or "--pair-contact" or "--pair-transition")
+catch (Exception error)
 {
-    var mode = args[0] switch { "--pair-contact" => PairMode.Contact, "--pair-transition" => PairMode.Transition, _ => PairMode.Scenes };
-    await PairProbe.Run(new Uri(args[1]), int.Parse(args[2]), int.Parse(args[3]), mode);
-    return;
-}
-using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(ProbeSeconds * 2));
-var processes = Process.GetProcesses().Where(p => p.ProcessName.StartsWith("DOSBox", StringComparison.OrdinalIgnoreCase));
-foreach (var process in processes)
-{
-    using (process)
-    {
-        Console.WriteLine($"DOSBox {process.Id}: {process.MainWindowTitle}");
-        try
-        {
-            using var game = new GameBridge(process.Id, limit.Token);
-            Console.WriteLine(game.Inspect());
-            if (args.Length == 2 && args[0] == "--scene" && args[1] == process.Id.ToString())
-            {
-                var scene = game.InspectScene();
-                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(scene));
-                continue;
-            }
-            if (args.Length != 2 || args[0] is not ("--inject" or "--transition") || args[1] != process.Id.ToString()) { continue; }
-            var before = game.Inspect();
-            if (before.Frame is null) { continue; }
-            var guest = before.Frame with { X = 96 };
-            for (var tick = 0; tick < ProbeSeconds * 1000 / NetRules.TickMs; tick++)
-            {
-                game.Render([guest], InjectionMode.Experimental);
-                if (args[0] == "--transition" && tick == 20)
-                {
-                    game.Constrain(new PlayerState(Guid.NewGuid(), "Transition probe",
-                        before.Frame with { X = 260 }, 1, ConstraintKind.Collision));
-                }
-                await Task.Delay(NetRules.TickInterval, limit.Token);
-            }
-            Console.WriteLine($"Injected: {game.Inspect()}");
-            if (game.Inspect().Frame?.Level == before.Frame.Level && game.Inspect().EnemyCount != before.EnemyCount)
-            {
-                throw new InvalidOperationException("Injection changed the physics actor count.");
-            }
-            game.Render([], InjectionMode.Observe);
-            var after = game.Inspect();
-            Console.WriteLine($"Restored: {after}");
-            if (before.RenderHex != after.RenderHex)
-            {
-                throw new InvalidOperationException("Renderer instruction was not restored.");
-            }
-            if (before.Frame.Level == after.Frame?.Level
-                && (before.EnemyCount != after.EnemyCount || before.SlotHash != after.SlotHash))
-            {
-                throw new InvalidOperationException("Enemy table restoration did not match.");
-            }
-        }
-        catch (IOException error) { Console.WriteLine(error.Message); }
-    }
+    // Diagnostic failures belong in stderr, rather than a Windows crash dialog.
+    Console.Error.WriteLine($"Probe failed: {error}");
+    return 1;
 }

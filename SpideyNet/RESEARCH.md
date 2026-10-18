@@ -1,7 +1,7 @@
 # Verified game layout
 
 Build SHA-256: `0695C840053C920BF198FA203AE64F8A028AA28EA186351AFA0AD4DE9EFD93F0`.
-DOSBox 0.74-3, normal CPU core. VGA and CGA share the actor, puzzle and renderer offsets below.
+DOSBox 0.74-3, normal CPU core. VGA is the only supported mode; its verified offsets follow.
 
 The MZ image has data segment `0x0FB3` and code segment `0x2CE9`.
 Subtracting them gives the host-memory code offset from DS: `0x1D360`.
@@ -20,7 +20,7 @@ Text marker `Mary Jane is DEAD!` ends at DS:`0x92B1`, the actor start.
 | Health | actor +39 |
 | Attack fields | actor +48 / +49 |
 
-VGA CS:`0x34E1` and CGA CS:`0x36CE` read actor +6 as the sprite frame.
+VGA CS:`0x34E1` reads actor +6 as the sprite frame.
 Actor +19 is an animation-script pointer, not a frame. Protocol 3 sends actor
 +6 in `Pose`; guest records apply that byte while keeping local pointers.
 Facing uses three renderer bits: axis swap, horizontal flip and vertical flip.
@@ -28,7 +28,8 @@ Value 4 is the ceiling pose. Rejecting it removed hanging players from snapshots
 
 Native web lines use DS:`0x9658`/`0x965A` for the endpoint and
 DS:`0x965C`/`0x965E` for the origin. Actor +17 bit 1 enables drawing.
-CS:`0x3944` draws the clipped line in VGA/CGA. These records are not yet shared.
+CS:`0x3944` draws the clipped line in VGA. Protocol 5 shares bounded endpoints;
+remote lines are painted into the native playfield backing buffer.
 
 The actor loop uses BP at actor +1:
 
@@ -97,15 +98,15 @@ non-actor objects. Midnight's helicopter is mover 0, base X=8, Y=15, size 6x2.
 
 CS:`0x27D4` removes old solid object cells; `0x282B` redraws and advances them.
 External displacement corrections reproduce removal and rebuild object cells.
-The CGA renderer uses 16 bytes per 8x8 tile and a 64-byte background row.
+The VGA renderer uses 32 bytes per 8x8 tile across four planes.
 DS:`0x98CA`, `0x98D6` and `0x98DA` contain local background/tile far pointers.
 Changed cells are repainted in that background; native drawing copies it into
 the display buffer. All pointers are validated locally within DOS memory.
 
 # VGA graphics
 
-Video selection stores the menu number minus one at DS:`0x4`: VGA=0, EGA=1,
-Tandy=2, CGA=3. The bridge accepts VGA and CGA; EGA/Tandy remain unverified.
+Video selection stores the menu number minus one at DS:`0x4`. VGA is value 0;
+the bridge rejects every other value before accessing graphics.
 VGA uses BIOS mode `0x0D` (320x200, 16 colors), with a VGA palette set through
 BIOS `0x1010`. The renderer count instruction remains CS:`0x349A`.
 
@@ -127,3 +128,23 @@ and prior draw coordinates remain local.
 The isolated regression failed before this patch: X207 became X217 without
 an owner update. Afterward X185 remained X185; restoring native AI moved it
 to X193. The actor count stayed unchanged.
+
+# Inactive actors and HUD corruption
+
+CS:`0x0FEB` runs screen wrapping for every native actor, even after its active
+descriptor flag is cleared. It reads bounds at actor +33..+38 and adjusts current
+and previous positions, leaving those bounds unchanged. A hidden left bound of
+-32 therefore adds 256 to X every frame. Bounds at Y=200 also trigger vertical
+wrapping. Hiding the sprite frame alone does not make this safe.
+
+The VGA renderer clips X using an eight-bit width at CS:`0x3588`..`0x35BF`.
+Large coordinates can wrap that width and write outside the playfield into HUD
+video memory. Isolated execution of the saved native routine at X=26354/Y=147
+reproduced HUD writes without modifying a running game. Main graphics pointers,
+portrait assets and playfield buffers matched the unaffected instance.
+
+Inactive actors now use X=0, all bounds=0, drawn/previous Y=200, zero health and
+the hidden frame, while retaining native pointers. This avoids native wrapping
+and lets the renderer reject the off-screen sprite. Apply this when replicating
+death, not just while drawing guests, so it remains safe after disconnect.
+The `--inactive` diagnostic checks raw actor state after all patches are released.

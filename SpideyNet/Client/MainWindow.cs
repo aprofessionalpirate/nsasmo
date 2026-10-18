@@ -16,7 +16,8 @@ internal sealed class MainWindow : Form
     private readonly ComboBox shared = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
     private readonly Button connect = new() { Text = "Connect", AutoSize = true };
     private readonly Button disconnect = new() { Text = "Disconnect", AutoSize = true, Enabled = false };
-    private readonly Button fire = new() { Text = "Fire web · F8", AutoSize = true, Enabled = false };
+    private readonly Button fire = new() { Text = "Fire web · V", AutoSize = true, Enabled = false };
+    private readonly Button scan = new() { Text = "Refresh DOSBox", AutoSize = true };
     private readonly Label status = new() { Text = "Start SPIDEY.EXE in DOSBox and enter a room.", AutoSize = true };
     private readonly Label location = new() { AutoSize = true };
     private readonly ListView roster = new() { View = View.Details, FullRowSelect = true, Dock = DockStyle.Fill };
@@ -58,7 +59,6 @@ internal sealed class MainWindow : Form
         layout.Controls.Add(warning, 0, 8);
         layout.SetColumnSpan(warning, 2);
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill };
-        var scan = new Button { Text = "Refresh DOSBox", AutoSize = true };
         var copy = new Button { Text = "Copy room key", AutoSize = true };
         fire.Click += (_, _) => session.FireWeb();
         buttons.Controls.AddRange([connect, disconnect, scan, copy, fire]);
@@ -128,6 +128,8 @@ internal sealed class MainWindow : Form
         var connected = state == ConnectionState.Connected;
         connect.Enabled = !connected;
         disconnect.Enabled = connected;
+        // Keep the displayed process consistent with the active memory attachment.
+        scan.Enabled = !connected;
         fire.Enabled = connected && (InteractionMode)interactions.SelectedItem! == InteractionMode.Experimental;
         foreach (var control in new Control[] { games, endpoint, room, name, mode, interactions, shared }) { control.Enabled = !connected; }
     }
@@ -136,10 +138,16 @@ internal sealed class MainWindow : Form
     {
         var view = session.View;
         status.Text = view.Status;
-        location.Text = view.Local is null
+        var locationText = view.Local is null
             ? string.IsNullOrEmpty(view.Room) ? "Start a new game in DOSBox, then connect." : view.Room
             : $"{view.Room} · X {view.Local.X}, Y {view.Local.Y}";
-        if (!string.IsNullOrEmpty(view.Shared)) { location.Text += $" · {view.Shared}"; }
+        if (!string.IsNullOrEmpty(view.Shared))
+        {
+            locationText += $" · {view.Shared}";
+        }
+
+        // Assign the complete label once; removing and appending ownership made it blink.
+        location.Text = locationText;
         roster.BeginUpdate();
         roster.Items.Clear();
         foreach (var player in view.Players)

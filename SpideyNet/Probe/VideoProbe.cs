@@ -6,7 +6,7 @@ internal static class VideoProbe
     private const int DisplaySeconds = 20;
     private const short GuestX = 96;
 
-    internal static async Task Run(int processId)
+    internal static async Task RunAsync(int processId)
     {
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(DisplaySeconds * 3));
         using var game = new GameBridge(processId, stop.Token);
@@ -20,14 +20,14 @@ internal static class VideoProbe
 
         try
         {
-            game.Render([scene.Frame with { X = GuestX }], InjectionMode.Experimental);
+            game.Render([scene.Frame with { X = GuestX, Web = new WebState(160, 80, GuestX, 147) }], InjectionMode.Experimental);
             Apply(game, scene, moved);
             var changed = game.InspectScene()!;
             if (changed.TileHash == before.TileHash || changed.BackgroundHash == before.BackgroundHash)
             {
                 throw new InvalidOperationException("Moving scenery did not repaint graphics and collision tiles.");
             }
-            Console.WriteLine($"{changed.Video}: guest injection active; scenery and background changed.");
+            Console.WriteLine($"{changed.Video}: guest and remote web rendering active; scenery and background changed.");
             await Task.Delay(TimeSpan.FromSeconds(DisplaySeconds), stop.Token);
         }
         finally

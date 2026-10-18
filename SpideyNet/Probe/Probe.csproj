@@ -5,6 +5,8 @@
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Client/Session.cs" Link="Session.cs" />
+    <Compile Include="../Client/SessionView.cs" Link="SessionView.cs" />
     <ProjectReference Include="../Game/Game.csproj" />
     <ProjectReference Include="../Transport/Transport.csproj" />
   </ItemGroup>

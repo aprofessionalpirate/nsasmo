@@ -1,6 +1,6 @@
 # SpideyNet
 
-.NET 10 rewrite. The original project is unchanged.
+.NET 10 rewrite with VGA-only support. The original project is unchanged.
 
 ## Run locally
 
@@ -19,7 +19,7 @@ dotnet run --project Client --no-build
 
 Run `./Launch-Game.ps1`, select **1: VGA**, choose English, then **1: Play New Game**.
 The launcher uses its own temporary DOSBox configuration and leaves your existing settings intact.
-VGA is the preferred target. **4: CGA** remains supported; video mode is detected automatically.
+VGA is the only supported video mode. Select **1: VGA** in the game menu.
 The launcher uses `core=normal`; dynamic cores can cache patched instructions.
 Override `GameDirectory` and `DosBox` parameters for other paths.
 Refresh DOSBox in the client, select its process, and connect.
@@ -30,7 +30,7 @@ interaction and enemies/puzzles settings. Each runs their own DOSBox instance.
 Up to eight players share a room; guests appear only in the same game room.
 Remote actors use their own sprite frames and this process's graphics assets.
 Independent standing/walking animations and ceiling poses were verified in two
-VGA games. Native web lines are not yet synchronized.
+VGA games. Space-fired web lines are shared with other players in the same screen.
 
 ## Internet play
 
@@ -44,8 +44,10 @@ Share it privately. Avoid logging `/play` query strings at the reverse proxy.
 Use a dedicated relay for trusted players; this is not an account or
 competitive anti-cheat system. Deploy one relay instance: rooms live in memory.
 
-The relay and clients target 60 Hz. Interpolation buffers two updates (about
-33 ms). Each connection has one receive worker
+Network updates target 30 Hz; local input, sampling and rendering target 60 Hz.
+Interpolation buffers two network updates (about 67 ms). Thirty updates/sec halves
+update traffic compared with sixty; local interpolation fills the gaps. Actual
+bandwidth depends on player count and shared scene data. Each connection has one receive worker
 and one send worker, a one-snapshot outbox, message/rate limits, keepalive
 deadlines, and a room cap. Clients reconnect with bounded backoff, expire stale
 players and interpolate positions with a two-update delay. WebSocket/TCP favors
@@ -54,27 +56,33 @@ reachability; packet loss can delay later packets. It is not UDP/QUIC transport.
 ## Experimental interactions
 
 Select `Experimental` under Player interaction on every client in the room.
-Collision checks block crossing another player's approximate body rectangle.
-Press **F8** in DOSBox or click **Fire web** to freeze the nearest player ahead within 64 coordinate units
+Players pass through each other without collision corrections.
+Press **V** in DOSBox or click **Fire web** to freeze the nearest player ahead within 64 coordinate units
 for 1.2 seconds. The cooldown is 600 ms. Rooms and facing direction are checked
 by the relay. This is a separate multiplayer command; it does not hook the
-original game's space key or draw a native web projectile.
+original game's Space key.
 
-The client enforces collision/freeze corrections by writing local X/Y only.
-These corrections can jitter under latency. Player health, scoring and the full
-DOS simulation remain independent.
+Ordinary **Space** shots publish their native endpoints and draw the line on peers
+using each game's graphics buffer. This works with player interactions disabled.
+With experimental interactions enabled, a line hitting another player attaches
+to them and pulls the shooter toward them while Space is held. Release Space,
+leave the screen or disconnect to detach. This approximates a tether; walls and
+latency can affect the pull and need further playtesting. Player health and scoring
+remain independent.
 
 ## Shared enemies and puzzles
 
 Choose `Experimental` under **Enemies/puzzles** on every client. This requires
 experimental rendering. Choose `Independent` for the previous behavior or Observe.
-Client and relay must both use protocol version 4; replace older published builds.
+Client and relay must both use protocol version 5; replace older published builds.
 
 The first active player in each game room owns enemy movement. Other players
 receive position, facing, animation, health and death updates. Hits from any player reduce
 shared health. Leaving or disconnecting transfers ownership and retains the
 room's cached enemy state. Followers skip native enemy AI and display the owner's
-state. Local player AI, collision and puzzle loops remain active. Native enemy AI
+state, interpolated at the local render rate. Owners preserve their live native
+positions instead of rewinding to a previous network sample. Local player AI,
+collision with the environment and puzzle loops remain active. Native enemy AI
 resumes on ownership transfer, lost connection or disconnect. Healing and scripted
 respawns are not modeled.
 
@@ -90,7 +98,7 @@ scripted interaction across all 63 rooms has not been verified.
 Moving scenery has separate ownership. A player standing on an object can drive
 it even when another player owns the enemies. Helicopters and platforms share
 their displacement and movement flags. The bridge rebuilds collision tiles and
-the VGA/CGA background from local game assets, and carries local riders with position
+the VGA background from local game assets, and carries local riders with position
 corrections. No sprite pointers or remote tile payloads cross the network.
 Rider detection is approximate; two human players riding together remain unverified.
 
@@ -112,7 +120,10 @@ descriptors. A complete renderer signature and a supported video mode are requir
 DOSBox threads are briefly suspended during writes and resumed in cleanup.
 Disconnect restores the instruction and reserved bytes. Room transitions
 restore the instruction and discard old-room backups. Unexpected count changes
-stop injection. Process suspension does not select an emulator frame boundary.
+stop injection. Room loading waits for a matching title and a short settling
+period; mismatched shared object tables defer that update and retry. Dead actors
+publish normalized invisible coordinates. Process suspension does not select an
+emulator frame boundary.
 
 Only domain state crosses the network: player/enemy coordinates, animation, health, switch
 states, moving object identities and commands. Process-local sprite references
@@ -128,7 +139,7 @@ bounded chunks from an x64 client. Live verification covers 32-bit DOSBox 0.74-3
 does not choose a frame boundary. Abruptly killing the client during suspension
 can leave DOSBox paused; a killed client cannot restore the renderer patch.
 Restart DOSBox after an abnormal exit. An emulator frame hook is the next step
-for stronger guarantees. Other builds, EGA/Tandy modes and dynamic cores are unverified.
+for stronger guarantees. Other game builds and dynamic cores are unverified.
 
 ## Validate
 
@@ -152,11 +163,31 @@ dotnet run --project Probe --no-build -- --pair-transition ws://localhost:5080 <
 
 # Show a guest and move/restore scenery, verifying graphics and collision buffers:
 dotnet run --project Probe --no-build -- --video <process-id>
+
+# Production session service: Observe, native PvP corrections and concurrent disconnect:
+# Both games in Midnight (Foyer automatically retreats); first player facing right.
+dotnet run --project Probe --no-build -- --session ws://localhost:5080 <first-id> <second-id>
+# Stop the relay after "Reconnect ready"; restart after "Reconnect outage":
+dotnet run --project Probe --no-build -- --session-reconnect ws://localhost:5080 <first-id> <second-id>
+# Five Midnight -> Foyer -> Midnight trips, with the other player staying put:
+dotnet run --project Probe --no-build -- --session-reentry ws://localhost:5080 <first-id> <second-id>
+# Native web-coordinate round trip and tether cleanup, in Midnight:
+dotnet run --project Probe --no-build -- --web <process-id>
+# Stabilize already defeated actors and check native wrapping after detach:
+dotnet run --project Probe --no-build -- --inactive <process-id>
+# With two desktop clients using Experimental interactions and shared scenes:
+# Click Fire web, or manually press V in DOSBox, within sixty seconds.
+dotnet run --project Probe --no-build -- --watch-web ws://localhost:5080 <room-key>
 ```
 
+The session probes compile the production session service directly, keeping its
+internal visibility. Live coverage and remaining checks are recorded in [TESTING.md](TESTING.md).
+Run Probe from a terminal to see its output. It returns exit code 0 on success,
+1 on failure, and 2 on timeout/cancellation. Failures print to stderr after cleanup.
+
 Tests cover record validation, signed coordinates, actor construction,
-interpolation, expiry, collisions and web range. Relay checks use real sockets
-for identities, room isolation, freeze expiry, collision, fragmentation and
+interpolation, expiry, player crossing and web range. Relay checks use real sockets
+for identities, room isolation, freeze expiry, web attachment/release, fragmentation and
 room capacity. Probe hashes reserved bytes before and after restoration.
 Malformed, oversized, binary and invalid-room messages are rejected in socket tests.
 Shared-state checks cover switch dirty bits, acknowledgements, pending damage,
@@ -173,7 +204,7 @@ VGA checks displayed a second Spider-Man and displaced Midnight's helicopter.
 Collision tiles, all four background planes, actor storage and the renderer restored
 exactly. Long VGA sessions remain unverified.
 
-Initial live verification used DOSBox 0.74-3 and a CGA `SPIDEY.EXE` with SHA-256
+The verified `SPIDEY.EXE` has SHA-256
 `0695C840053C920BF198FA203AE64F8A028AA28EA186351AFA0AD4DE9EFD93F0`.
 The corrected thirty-second rendering test displayed a second Spider-Man,
 kept the physics count at 2, and restored reserved bytes and the renderer.

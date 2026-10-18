@@ -38,7 +38,8 @@ public sealed class RemoteTrack
         return last.Frame with
         {
             X = (short)Math.Round(first.Frame.X + (last.Frame.X - first.Frame.X) * amount),
-            Y = (byte)Math.Round(first.Frame.Y + (last.Frame.Y - first.Frame.Y) * amount)
+            Y = (byte)Math.Round(first.Frame.Y + (last.Frame.Y - first.Frame.Y) * amount),
+            Web = WebRules.Interpolate(first.Frame.Web, last.Frame.Web, amount)
         };
     }
 }

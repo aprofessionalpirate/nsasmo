@@ -12,8 +12,12 @@ public sealed class SharedTrack
     private long epoch;
     private EnemyState[]? previous;
     private readonly Dictionary<int, EnemyState> damage = [];
-    private MoverState[] previousMovers = [];
     private Guid puzzleOwner;
+    private SharedState? accepted;
+    private long motionEpoch;
+    private byte motionLevel;
+    private Guid motionOwner;
+    private readonly Dictionary<int, EnemyTrack> enemyTracks = [];
 
     public SharedReport Capture(GameScene scene, WorldState? world)
     {
@@ -43,7 +47,6 @@ public sealed class SharedTrack
             level = scene.Frame.Level;
             epoch = 0;
             previous = null;
-            previousMovers = [];
             damage.Clear();
         }
         if (previous is not null)
@@ -62,9 +65,20 @@ public sealed class SharedTrack
             enemies, serial, scene.Movers);
     }
 
-    public SharedState? Accept(GameScene scene, WorldState? world)
+    public SharedState? Accept(GameScene scene, WorldState? world, long? nowMs = null)
     {
-        if (world?.Shared is null || world.Tick == tick) { return null; }
+        if (world?.Shared is null)
+        {
+            return null;
+        }
+
+        var now = nowMs ?? Environment.TickCount64;
+        if (world.Tick == tick)
+        {
+            return accepted?.Room is { } cached && cached.Owner != world.Self && cached.Level == scene.Frame.Level
+                ? Sample(accepted, now) : null;
+        }
+
         tick = world.Tick;
         var shared = world.Shared;
         puzzleOwner = shared.PuzzleOwner;
@@ -79,8 +93,12 @@ public sealed class SharedTrack
         baseline = puzzles;
 
         var room = shared.Room;
-        if (room is null || room.Level != scene.Frame.Level) { return new SharedState(puzzles, null); }
-        var continuing = epoch == room.Epoch && previous is not null;
+        if (room is null || room.Level != scene.Frame.Level)
+        {
+            accepted = new SharedState(puzzles, null);
+            return accepted;
+        }
+
         epoch = room.Epoch;
         foreach (var mover in damage.Keys.ToArray())
         {
@@ -91,18 +109,44 @@ public sealed class SharedTrack
             ? enemy with { Health = Math.Min(enemy.Health, hit.Health) } : enemy).ToArray();
         previous = enemies;
 
-        // The room owner keeps native movement; all peers receive shared damage.
-        if (room.Owner == world.Self && continuing)
+        if (motionEpoch != room.Epoch || motionLevel != room.Level || motionOwner != room.Owner)
         {
-            enemies = enemies.Select(enemy => scene.Enemies.FirstOrDefault(value => value.Mover == enemy.Mover)
-                is { } local ? local with { Health = Math.Min(local.Health, enemy.Health) } : enemy).ToArray();
+            enemyTracks.Clear();
+            motionEpoch = room.Epoch;
+            motionLevel = room.Level;
+            motionOwner = room.Owner;
         }
-        var movers = room.Movers.Select(mover => mover.Owner == world.Self
-            && previousMovers.Any(before => before.Mover == mover.Mover && before.Owner == world.Self)
-            && scene.Movers.FirstOrDefault(local => local.Mover == mover.Mover) is { } local
-            ? local with { Owner = mover.Owner } : mover).ToArray();
-        previousMovers = room.Movers;
-        return new SharedState(puzzles, room with { Enemies = enemies, Movers = movers });
+
+        accepted = new SharedState(puzzles, room with { Enemies = enemies });
+        if (room.Owner == world.Self)
+        {
+            return accepted;
+        }
+
+        foreach (var enemy in enemies)
+        {
+            if (!enemyTracks.TryGetValue(enemy.Mover, out var track))
+            {
+                track = new EnemyTrack();
+                enemyTracks.Add(enemy.Mover, track);
+            }
+
+            track.Add(enemy, now);
+        }
+
+        return Sample(accepted, now);
+    }
+
+    private SharedState Sample(SharedState state, long now)
+    {
+        var room = state.Room!;
+        var enemies = room.Enemies.Select(enemy =>
+        {
+            var sampled = enemyTracks.TryGetValue(enemy.Mover, out var track) ? track.Sample(now) : enemy;
+            return damage.TryGetValue(enemy.Mover, out var hit)
+                ? sampled with { Health = Math.Min(sampled.Health, hit.Health) } : sampled;
+        }).ToArray();
+        return state with { Room = room with { Enemies = enemies } };
     }
 
     private void Reset(Guid identity)
@@ -112,7 +156,11 @@ public sealed class SharedTrack
         tick = -1;
         epoch = 0;
         previous = null;
-        previousMovers = [];
+        accepted = null;
+        enemyTracks.Clear();
+        motionEpoch = 0;
+        motionLevel = 0;
+        motionOwner = Guid.Empty;
         pending.Clear();
         sent.Clear();
         serial = 0;

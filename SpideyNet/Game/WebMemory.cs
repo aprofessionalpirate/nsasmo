@@ -1,0 +1,95 @@
+using System.Buffers.Binary;
+using SpideyNet.Core;
+
+namespace SpideyNet.Game;
+
+internal sealed class WebMemory(ProcessMemory memory, long dataAddress, long levelAddress)
+{
+    private const int CoordinatesOffset = 0x9658;
+    private readonly TileMemory pixels = new(memory, dataAddress);
+    private IReadOnlyList<PixelPatch> patches = [];
+    private byte ownedLevel;
+
+    internal WebState? Read(byte[] actor)
+    {
+        if ((actor[17] & 2) == 0)
+        {
+            return null;
+        }
+
+        var bytes = memory.Read(dataAddress + CoordinatesOffset, 8);
+        var web = new WebState(BinaryPrimitives.ReadInt16LittleEndian(bytes), BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(2)),
+            BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(4)), BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(6)));
+        return WebRules.Valid(web) ? web : null;
+    }
+
+    internal void Constrain(WebState web)
+    {
+        if (!WebRules.Valid(web))
+        {
+            throw new InvalidDataException("Invalid web attachment geometry.");
+        }
+
+        var bytes = new byte[8];
+        BinaryPrimitives.WriteInt16LittleEndian(bytes, web.EndX);
+        BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(2), web.EndY);
+        BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(4), web.OriginX);
+        BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(6), web.OriginY);
+        memory.Write(dataAddress + CoordinatesOffset, bytes);
+        var flags = dataAddress + GameProfile.PlayerDataOffset + 17;
+        memory.Write(flags, [(byte)(memory.Read(flags, 1)[0] | 2)]);
+    }
+
+    internal void Release()
+    {
+        var flags = dataAddress + GameProfile.PlayerDataOffset + 17;
+        memory.Write(flags, [(byte)(memory.Read(flags, 1)[0] & ~2)]);
+    }
+
+    internal void Update(IReadOnlyList<WebState> webs, byte level)
+    {
+        TryRestore();
+        ownedLevel = level;
+        patches = pixels.PlanWebs(webs);
+        foreach (var patch in patches)
+        {
+            memory.Write(patch.Address, patch.After);
+        }
+    }
+
+    internal bool TryRestore()
+    {
+        // Room loading replaces the graphics; an old room's pixels no longer belong here.
+        if (patches.Count > 0 && memory.Read(levelAddress, 1)[0] == ownedLevel)
+        {
+            foreach (var patch in patches)
+            {
+                var current = memory.Read(patch.Address, patch.After.Length);
+                for (var index = 0; index < current.Length; index++)
+                {
+                    if (current[index] == patch.After[index])
+                    {
+                        current[index] = patch.Before[index];
+                    }
+                }
+
+                // Preserve any native tile or script redraw which happened since painting.
+                memory.Write(patch.Address, current);
+            }
+        }
+
+        patches = [];
+        return true;
+    }
+
+    internal void Restore()
+    {
+        if (patches.Count == 0)
+        {
+            return;
+        }
+
+        using var pause = memory.Pause();
+        TryRestore();
+    }
+}

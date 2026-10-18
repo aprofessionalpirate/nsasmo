@@ -5,7 +5,7 @@ namespace SpideyNet.Game;
 
 internal sealed class GameInput(int processId)
 {
-    private const int WebKey = 0x77;
+    private const int WebKey = 0x56;
     private const short DownMask = unchecked((short)0x8000);
     private bool wasDown;
 

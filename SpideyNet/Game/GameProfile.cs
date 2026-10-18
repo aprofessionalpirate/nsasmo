@@ -7,7 +7,7 @@ internal static class GameProfile
     internal const int RenderOffset = 0x3497;
     internal const int CountInstruction = 3;
     internal const int ModeOffset = 4;
-    internal static bool Supports(byte mode) => mode is (byte)VideoMode.Vga or (byte)VideoMode.Cga;
+    internal static bool Supports(byte mode) => mode == (byte)VideoMode.Vga;
     internal static ReadOnlySpan<byte> RenderPrefix => [0xBB, 0xB2, 0x92];
     internal static ReadOnlySpan<byte> RenderCount => [0x8B, 0x0E, 0x8B, 0x92];
     internal static ReadOnlySpan<byte> RenderSuffix => [0xFC, 0x51, 0x53, 0x06, 0xE8, 0x0A, 0x00,

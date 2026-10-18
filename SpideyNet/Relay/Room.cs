@@ -122,13 +122,16 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                 frame = frame with { X = previous.X, Y = previous.Y };
                 constraint = ConstraintKind.Frozen;
             }
-            else if (peers.Values.Any(p => p.Id != peer.Id && p.State is not null
-                && now - p.LastSeen < NetRules.StaleMs && InteractionRules.Collides(previous, frame, p.State.Frame)))
+        }
+        if (Interactions == InteractionMode.Experimental && constraint != ConstraintKind.Frozen)
+        {
+            frame = ApplyWeb(peer, frame, now);
+            if (peer.WebTarget is not null)
             {
-                frame = frame with { X = previous.X, Y = previous.Y };
-                constraint = ConstraintKind.Collision;
+                constraint = ConstraintKind.WebPull;
             }
         }
+
         peer.State = new PlayerState(peer.Id, peer.Name, frame, update.Sequence, constraint);
         if (Interactions != InteractionMode.Experimental || update.Action != PlayerAction.FireWeb
             || constraint == ConstraintKind.Frozen || peer.WebReadyAt > now) { return; }
@@ -140,6 +143,30 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
         if (target?.State is null) { return; }
         target.FrozenUntil = now + InteractionRules.FreezeMs;
         target.State = target.State with { Constraint = ConstraintKind.Frozen };
+    }
+
+    private GameFrame ApplyWeb(Peer peer, GameFrame frame, long now)
+    {
+        if (!frame.WebHeld)
+        {
+            peer.WebTarget = null;
+            return frame;
+        }
+
+        var candidates = peers.Values.Where(other => other.Id != peer.Id && other.State is not null
+            && other.State.Frame.Level == frame.Level && now - other.LastSeen < NetRules.StaleMs).ToArray();
+        var target = candidates.FirstOrDefault(other => other.Id == peer.WebTarget);
+        var continuing = target is not null;
+        target ??= candidates.Where(other => WebRules.Hits(frame, other.State!.Frame))
+            .OrderBy(other => Math.Abs(other.State!.Frame.X - frame.X)).FirstOrDefault();
+        peer.WebTarget = target?.Id;
+        if (target?.State is null)
+        {
+            return frame;
+        }
+
+        var start = continuing && peer.State?.Frame.Level == frame.Level ? peer.State.Frame : frame;
+        return WebRules.Pull(frame with { X = start.X, Y = start.Y }, target.State.Frame, (now - peer.LastSeen) / 1000d);
     }
 
     private static async Task SendLoop(WebSocket socket, Peer peer, CancellationToken token)

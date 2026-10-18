@@ -5,11 +5,11 @@ using SpideyNet.Transport;
 
 internal static class IntegrationChecks
 {
-    private const int MinSnapshotRate = 45;
-    private const int MaxSnapshotRate = 75;
+    private const int MinSnapshotRate = 24;
+    private const int MaxSnapshotRate = 36;
     private const byte StandingPose = 0x18;
     private const byte CrouchingPose = 0x12;
-    internal static async Task Run(Uri endpoint)
+    internal static async Task RunAsync(Uri endpoint)
     {
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var room = Guid.NewGuid().ToString("N");
@@ -28,40 +28,45 @@ internal static class IntegrationChecks
         };
         try
         {
-            await Until(() => first.World?.Players.Length == 2 && second.World?.Players.Length == 2, stop.Token);
-            await Until(() => isolated.World?.Players.Length == 1, stop.Token);
+            await UntilAsync(() => first.World?.Players.Length == 2 && second.World?.Players.Length == 2, stop.Token);
+            await UntilAsync(() => isolated.World?.Players.Length == 1, stop.Token);
             Check(() => first.World!.Self != second.World!.Self, "Relay assigns distinct identities");
             const byte CeilingFacing = 4;
             first.Publish(source with { Pose = CrouchingPose, Facing = CeilingFacing });
-            await Until(() => second.World?.Players.Any(p => p.Id == first.World!.Self
+            await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self
                 && p.Frame.Pose == CrouchingPose && p.Frame.Facing == CeilingFacing) == true, stop.Token);
             Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.Pose == StandingPose,
                 "Player animations remain independent");
             first.Publish(source);
             first.FireWeb();
-            await Until(() => second.World?.Players.Any(p => p.Id == second.World.Self
+            await UntilAsync(() => second.World?.Players.Any(p => p.Id == second.World.Self
                 && p.Constraint == ConstraintKind.Frozen) == true, stop.Token);
             second.Publish(source with { X = 140 });
             await Task.Delay(150, stop.Token);
             Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.X == 80, "Freeze holds authoritative position");
-            await Until(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 140, stop.Token);
+            await UntilAsync(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 140, stop.Token);
             second.Publish(source with { X = 80 });
-            await Until(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 80, stop.Token);
+            await UntilAsync(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 80, stop.Token);
             first.Publish(source with { X = 100 });
-            await Until(() => first.World?.Players.Single(p => p.Id == first.World.Self).Constraint == ConstraintKind.Collision, stop.Token);
-            Check(() => first.World!.Players.Single(p => p.Id == first.World.Self).Frame.X == 40, "Collision blocks crossing");
-            await FragmentCheck(endpoint, stop.Token);
-            await CapacityCheck(endpoint, stop.Token);
-            await RejectCheck(endpoint, "{broken"u8.ToArray(), WebSocketMessageType.Text, stop.Token);
-            await RejectCheck(endpoint, new byte[NetRules.MaxMessageBytes + 1], WebSocketMessageType.Text, stop.Token);
-            await RejectCheck(endpoint, [0], WebSocketMessageType.Binary, stop.Token);
+            await UntilAsync(() => first.World?.Players.Single(p => p.Id == first.World.Self).Frame.X == 100, stop.Token);
+            Check(() => first.World!.Players.Single(p => p.Id == first.World.Self).Constraint == ConstraintKind.None,
+                "Players pass through each other without position corrections");
+            await NativeWebCheckAsync(first, second, source, stop.Token);
+            await FragmentCheckAsync(endpoint, stop.Token);
+            await CapacityCheckAsync(endpoint, stop.Token);
+            await RejectCheckAsync(endpoint, "{broken"u8.ToArray(), WebSocketMessageType.Text, stop.Token);
+            await RejectCheckAsync(endpoint, new byte[NetRules.MaxMessageBytes + 1], WebSocketMessageType.Text, stop.Token);
+            await RejectCheckAsync(endpoint, [0], WebSocketMessageType.Binary, stop.Token);
             var invalid = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1, source with { Level = 0 }));
-            await RejectCheck(endpoint, invalid, WebSocketMessageType.Text, stop.Token);
+            await RejectCheckAsync(endpoint, invalid, WebSocketMessageType.Text, stop.Token);
             var invalidPose = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
                 source with { Pose = GameLayout.HiddenCharacter }));
-            await RejectCheck(endpoint, invalidPose, WebSocketMessageType.Text, stop.Token);
-            await CadenceCheck(endpoint, stop.Token);
-            Console.WriteLine("Relay checks: identities, room isolation, web freeze, expiry, collision, fragmentation, capacity, malformed/oversized/binary/invalid-room rejection.");
+            await RejectCheckAsync(endpoint, invalidPose, WebSocketMessageType.Text, stop.Token);
+            var invalidWeb = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
+                source with { Web = new WebState(short.MaxValue, 0, 0, 0) }));
+            await RejectCheckAsync(endpoint, invalidWeb, WebSocketMessageType.Text, stop.Token);
+            await CadenceCheckAsync(endpoint, stop.Token);
+            Console.WriteLine("Relay checks: identities, room isolation, freeze/expiry, free crossing, native web/pull/release, fragmentation, capacity and invalid-message rejection.");
         }
         finally
         {
@@ -71,7 +76,32 @@ internal static class IntegrationChecks
         }
     }
 
-    private static async Task RejectCheck(Uri endpoint, byte[] payload, WebSocketMessageType type, CancellationToken token)
+    private static async Task NativeWebCheckAsync(RelayClient first, RelayClient second, GameFrame source, CancellationToken token)
+    {
+        // Native Space webs carry their geometry; a hit pulls the shooter toward its target.
+        second.Publish(source with { X = 140 });
+        await UntilAsync(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 140, token);
+        var web = new WebState(150, 107, 47, 107);
+        first.Publish(source with { Web = web, WebHeld = true });
+        await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self
+            && p.Constraint == ConstraintKind.WebPull && p.Frame.Web?.EndX == 147) == true, token);
+        await UntilAsync(() => first.World?.Players.Single(p => p.Id == first.World.Self).Frame.X > 50, token);
+
+        second.Publish(source with { Level = 3, X = 140 });
+        await UntilAsync(() => first.World?.Players.Single(p => p.Id == first.World.Self).Constraint == ConstraintKind.None, token);
+        first.Publish(source with { X = 60 });
+        await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self
+            && p.Frame.X == 60 && p.Frame.Web is null && p.Constraint == ConstraintKind.None) == true, token);
+
+        // Visible webs remain replicated when no player is hit, including another room.
+        second.Publish(source with { Level = 3, X = 140 });
+        first.Publish(source with { Web = web, WebHeld = true });
+        await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self
+            && p.Frame.Web == web && p.Constraint == ConstraintKind.None) == true, token);
+        first.Publish(source);
+    }
+
+    private static async Task RejectCheckAsync(Uri endpoint, byte[] payload, WebSocketMessageType type, CancellationToken token)
     {
         using var socket = new ClientWebSocket();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -85,7 +115,7 @@ internal static class IntegrationChecks
         catch (WebSocketException) { }
     }
 
-    private static async Task CadenceCheck(Uri endpoint, CancellationToken token)
+    private static async Task CadenceCheckAsync(Uri endpoint, CancellationToken token)
     {
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(Address(endpoint, Guid.NewGuid().ToString("N")), token);
@@ -104,12 +134,12 @@ internal static class IntegrationChecks
         // Allow scheduler jitter; count delivered snapshots rather than timer settings.
         var rate = received / clock.Elapsed.TotalSeconds;
         Check(() => rate >= MinSnapshotRate && rate <= MaxSnapshotRate && last.Tick > first.Tick,
-            "Relay delivers snapshots near sixty hertz");
+            "Relay delivers snapshots near thirty hertz");
         Console.WriteLine($"Relay snapshot rate: {rate:F1}/sec.");
         socket.Abort();
     }
 
-    private static async Task FragmentCheck(Uri endpoint, CancellationToken token)
+    private static async Task FragmentCheckAsync(Uri endpoint, CancellationToken token)
     {
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(Address(endpoint, Guid.NewGuid().ToString("N")), token);
@@ -124,7 +154,7 @@ internal static class IntegrationChecks
         socket.Abort();
     }
 
-    private static async Task CapacityCheck(Uri endpoint, CancellationToken token)
+    private static async Task CapacityCheckAsync(Uri endpoint, CancellationToken token)
     {
         var room = Guid.NewGuid().ToString("N");
         var sockets = new List<ClientWebSocket>();
@@ -153,7 +183,7 @@ internal static class IntegrationChecks
         Query = $"room={room}&name=Test&pvp=0"
     }.Uri;
 
-    private static async Task Until(Func<bool> condition, CancellationToken token)
+    private static async Task UntilAsync(Func<bool> condition, CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));

@@ -13,6 +13,7 @@ internal sealed class Peer(string name)
     internal int RateCount { get; set; }
     internal long FrozenUntil { get; set; }
     internal long WebReadyAt { get; set; }
+    internal Guid? WebTarget { get; set; }
     internal long SharedEpoch { get; set; } = -1;
     internal long SharedSerial { get; set; }
     internal Channel<WorldState> Outbox { get; } = Channel.CreateBounded<WorldState>(

@@ -21,15 +21,41 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
     private readonly MoverMemory movers = new(memory, dataAddress, playerAddress);
     private readonly Dictionary<(byte Level, int Index), byte> contacts = [];
     private const byte ContactFlag = 0x40;
+    private long appliedEpoch;
+    private byte appliedLevel;
+    private Guid appliedOwner;
+    private readonly Dictionary<int, Guid> moverOwners = [];
+
+    internal void Reset()
+    {
+        appliedEpoch = 0;
+        appliedLevel = 0;
+        appliedOwner = Guid.Empty;
+        moverOwners.Clear();
+        contacts.Clear();
+    }
+
+    internal void HideDead(ushort count)
+    {
+        foreach (var actor in Actors(count))
+        {
+            if (actor.Data[GameLayout.HealthOffset] == 0 || actor.Data[GameLayout.CharacterOffset] == GameLayout.HiddenCharacter)
+            {
+                // Stale movement can send hidden actors far outside the renderer's clip range.
+                var hidden = EnemyRecord.Hide(actor.Data);
+                if (!actor.Data.AsSpan().SequenceEqual(hidden))
+                {
+                    memory.Write(actor.Address, hidden);
+                }
+            }
+        }
+    }
 
     internal GameScene Read(GameFrame frame, ushort count)
     {
         Check(count);
         var actors = Actors(count);
-        var enemies = actors.Select(actor => new EnemyState(Mover(actor.Data),
-            BinaryPrimitives.ReadInt16LittleEndian(actor.Data.AsSpan(GameLayout.XOffset)),
-            actor.Data[GameLayout.YOffset], actor.Data[GameLayout.FacingOffset], actor.Data[GameLayout.HealthOffset],
-            actor.Data[GameLayout.CharacterOffset])).ToArray();
+        var enemies = actors.Select(actor => EnemyRecord.Decode(actor.Data, Mover(actor.Data))).ToArray();
         if (!SharedRules.Valid(enemies)) { throw new IOException("Unsupported native enemy state."); }
         var puzzles = memory.Read(dataAddress + PuzzleOffset, SharedRules.PuzzleBytes);
         return new GameScene(frame, puzzles, enemies, movers.Read(count).Select(shape => shape.State).ToArray(),
@@ -58,45 +84,80 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
             ((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]).ToString(), movers.PixelHash());
     }
 
-    internal void Apply(SharedState state, ushort count, GameFrame frame)
+    internal bool TryApply(SharedState state, ushort count, GameFrame frame, Guid? localPlayer)
     {
         Check(count);
         if (!SharedRules.Valid(state)) { throw new InvalidDataException("Invalid shared scene."); }
         var actors = Actors(count);
         var patches = new List<(long Address, byte[] Data)>();
-        if (state.Room is not null) { patches.AddRange(movers.Plan(movers.Read(count), state.Room.Movers, frame)); }
+        var preserveMotion = state.Room is { } authority && localPlayer == authority.Owner
+            && appliedLevel == authority.Level && appliedEpoch == authority.Epoch && appliedOwner == authority.Owner;
+        if (state.Room is { } room)
+        {
+            var shapes = movers.Read(count);
+            if (shapes.Length != room.Movers.Length || room.Movers.Any(target =>
+                shapes.Count(shape => MoverRules.SameShape(shape.State, target)) != 1)
+                || room.Enemies.Any(target => actors.Count(actor => Mover(actor.Data) == target.Mover) != 1))
+            {
+                return false;
+            }
+
+            // An owner must keep the live paused state, not rewind to an earlier sample.
+            var targets = room.Movers.Select(target => localPlayer == target.Owner
+                && moverOwners.GetValueOrDefault(target.Mover) == target.Owner
+                ? shapes.Single(shape => shape.State.Mover == target.Mover).State : target).ToArray();
+            patches.AddRange(movers.Plan(shapes, targets, frame));
+        }
+
         foreach (var enemy in state.Room?.Enemies ?? [])
         {
             var candidates = actors.Where(actor => Mover(actor.Data) == enemy.Mover).ToArray();
             if (candidates.Length != 1) { throw new IOException("Native enemy identity mismatch; start the same game build."); }
             var actor = candidates[0];
             var local = actor.Data;
-            var position = new byte[4];
-            BinaryPrimitives.WriteInt16LittleEndian(position, enemy.X);
-            position[2] = enemy.Y;
-            position[3] = enemy.Facing;
-            patches.Add((actor.Address + GameLayout.XOffset, position));
-            patches.Add((actor.Address + GameLayout.HealthOffset, [enemy.Health]));
-            patches.Add((actor.Address + GameLayout.CharacterOffset, [enemy.Pose]));
+            patches.Add((actor.Address + GameLayout.HealthOffset, [Math.Min(enemy.Health, local[GameLayout.HealthOffset])]));
+            if (!preserveMotion && enemy.Health != 0)
+            {
+                var position = new byte[4];
+                BinaryPrimitives.WriteInt16LittleEndian(position, enemy.X);
+                position[2] = enemy.Y;
+                position[3] = enemy.Facing;
+                patches.Add((actor.Address + GameLayout.XOffset, position));
+                patches.Add((actor.Address + GameLayout.CharacterOffset, [enemy.Pose]));
 
-            // Move collision bounds with the actor; keep prior draw coordinates local.
-            var dx = enemy.X - BinaryPrimitives.ReadInt16LittleEndian(local.AsSpan(GameLayout.XOffset));
-            var dy = enemy.Y - local[GameLayout.YOffset];
-            var bounds = local.AsSpan(GameLayout.BoundsLeftOffset, 6).ToArray();
-            BinaryPrimitives.WriteInt16LittleEndian(bounds, checked((short)(BinaryPrimitives.ReadInt16LittleEndian(bounds) + dx)));
-            BinaryPrimitives.WriteInt16LittleEndian(bounds.AsSpan(2), checked((short)(BinaryPrimitives.ReadInt16LittleEndian(bounds.AsSpan(2)) + dx)));
-            bounds[4] = unchecked((byte)(bounds[4] + dy));
-            bounds[5] = unchecked((byte)(bounds[5] + dy));
-            patches.Add((actor.Address + GameLayout.BoundsLeftOffset, bounds));
+                // Move collision bounds with replicas; keep prior draw coordinates local.
+                var dx = enemy.X - BinaryPrimitives.ReadInt16LittleEndian(local.AsSpan(GameLayout.XOffset));
+                var dy = enemy.Y - local[GameLayout.YOffset];
+                var bounds = local.AsSpan(GameLayout.BoundsLeftOffset, 6).ToArray();
+                BinaryPrimitives.WriteInt16LittleEndian(bounds, checked((short)(BinaryPrimitives.ReadInt16LittleEndian(bounds) + dx)));
+                BinaryPrimitives.WriteInt16LittleEndian(bounds.AsSpan(2), checked((short)(BinaryPrimitives.ReadInt16LittleEndian(bounds.AsSpan(2)) + dx)));
+                bounds[4] = unchecked((byte)(bounds[4] + dy));
+                bounds[5] = unchecked((byte)(bounds[5] + dy));
+                patches.Add((actor.Address + GameLayout.BoundsLeftOffset, bounds));
+            }
             if (enemy.Health != 0) { continue; }
+            // Replicated death must leave inert bounds before the DOS wrap loop runs.
+            patches.Add((actor.Address, EnemyRecord.Hide(local)));
             var flagsAddress = dataAddress + MoverOffset + enemy.Mover * MoverStride + DescriptorFlags;
             patches.Add((flagsAddress, [(byte)(memory.Read(flagsAddress, 1)[0] & ~ActiveFlag)]));
-            patches.Add((actor.Address + GameLayout.CharacterOffset, [GameLayout.HiddenCharacter]));
         }
 
         var puzzles = memory.Read(dataAddress + PuzzleOffset, SharedRules.PuzzleBytes);
         patches.Add((dataAddress + PuzzleOffset, SharedRules.Apply(puzzles, state.Puzzles)));
         foreach (var patch in patches) { memory.Write(patch.Address, patch.Data); }
+        if (state.Room is { } applied)
+        {
+            appliedLevel = applied.Level;
+            appliedEpoch = applied.Epoch;
+            appliedOwner = applied.Owner;
+            moverOwners.Clear();
+            foreach (var mover in applied.Movers)
+            {
+                moverOwners[mover.Mover] = mover.Owner;
+            }
+        }
+
+        return true;
     }
 
     private (long Address, byte[] Data)[] Actors(ushort count)
@@ -135,7 +196,7 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
                 + GameProfile.CountInstruction + RenderPatch.Size, GameProfile.RenderSuffix.Length)
                 .AsSpan().SequenceEqual(GameProfile.RenderSuffix))
         {
-            throw new IOException("Shared scenes require the verified game build in VGA or CGA mode.");
+            throw new IOException("Shared scenes require the verified game build in VGA mode.");
         }
     }
 

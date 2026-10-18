@@ -57,6 +57,46 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
         return Convert.ToHexString(SHA256.HashData(memory.Read(buffer, raster.BufferBytes)));
     }
 
+    internal IReadOnlyList<PixelPatch> PlanWebs(IReadOnlyList<WebState> webs)
+    {
+        if (webs.Count == 0)
+        {
+            return [];
+        }
+
+        var raster = TileRaster.For((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]);
+        var address = Far(BufferPointer, Ram(), raster.BufferBytes);
+        var before = memory.Read(address, raster.BufferBytes);
+        var after = before.ToArray();
+        foreach (var web in webs)
+        {
+            raster.PaintWeb(web, after);
+        }
+
+        // Batch one changed span per plane, rather than issuing a cross-process write per pixel.
+        var patches = new List<PixelPatch>();
+        for (var plane = 0; plane < raster.Planes; plane++)
+        {
+            var start = plane * raster.PlaneBytes;
+            var end = start + raster.PlaneBytes;
+            while (start < end && before[start] == after[start])
+            {
+                start++;
+            }
+            while (end > start && before[end - 1] == after[end - 1])
+            {
+                end--;
+            }
+
+            if (start < end)
+            {
+                patches.Add(new PixelPatch(address + start, before[start..end], after[start..end]));
+            }
+        }
+
+        return patches;
+    }
+
     private long Ram()
     {
         var instruction = memory.Read(dataAddress + GameProfile.CodeFromData + DataInstruction, 5);

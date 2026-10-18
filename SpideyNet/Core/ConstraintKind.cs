@@ -3,6 +3,7 @@ namespace SpideyNet.Core;
 public enum ConstraintKind
 {
     None,
-    Collision,
-    Frozen
+    Position,
+    Frozen,
+    WebPull
 }

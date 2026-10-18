@@ -21,22 +21,58 @@ public sealed class GameBridge : IDisposable
     private ushort ownedCount;
     private SceneMemory? sceneMemory;
     private EnemyLoop? enemyLoop;
+    private WebMemory? webMemory;
+    private const int RoomSettleMs = 100;
+    private byte observedLevel;
+    private long roomChangedAt;
+    private bool webPull;
 
     public GameBridge(int processId, CancellationToken token)
     {
         memory = new ProcessMemory(processId);
         input = new GameInput(processId);
-        try { Locate(token); }
+        try
+        {
+            Locate(token);
+            observedLevel = memory.Read(levelAddress, 1)[0];
+            roomChangedAt = Environment.TickCount64 - RoomSettleMs;
+        }
         catch { memory.Dispose(); throw; }
     }
 
     public GameFrame? Read()
     {
         ValidateMarkers();
+        if (!GameProfile.Supports(memory.Read(playerAddress - GameProfile.PlayerDataOffset + GameProfile.ModeOffset, 1)[0]))
+        {
+            throw new IOException("SpideyNet requires VGA. Select VGA in the game's video menu.");
+        }
+
         var level = memory.Read(levelAddress, 1)[0];
         var data = memory.Read(playerAddress, GameLayout.RecordSize);
         if (level != memory.Read(levelAddress, 1)[0]) { return null; }
-        return GameLayout.Decode(data, level);
+        var frame = GameLayout.Decode(data, level);
+        if (frame is null || !LevelNames.Matches(level, Title))
+        {
+            return null;
+        }
+
+        // The DOS loader changes the room index before finishing its object tables.
+        // Wait briefly after transitions before publishing or patching that scene.
+        if (observedLevel != level)
+        {
+            observedLevel = level;
+            roomChangedAt = Environment.TickCount64;
+            sceneMemory?.Reset();
+        }
+
+        if (Environment.TickCount64 - roomChangedAt < RoomSettleMs)
+        {
+            return null;
+        }
+
+        webMemory ??= new WebMemory(memory, playerAddress - GameProfile.PlayerDataOffset, levelAddress);
+        return frame with { Web = webMemory.Read(data), WebHeld = (data[1] & 0x10) != 0 };
     }
 
     public string Title => Encoding.ASCII.GetString(memory.Read(
@@ -53,7 +89,7 @@ public sealed class GameBridge : IDisposable
         return sceneMemory.Read(local, ReadCount());
     }
 
-    public void SyncScene(SharedState state, EnemyMode mode = EnemyMode.Native)
+    public void SyncScene(SharedState state, EnemyMode mode = EnemyMode.Native, Guid? localPlayer = null)
     {
         using var pause = memory.Pause();
         var local = Read();
@@ -63,7 +99,12 @@ public sealed class GameBridge : IDisposable
             return;
         }
         sceneMemory ??= new SceneMemory(memory, playerAddress - GameProfile.PlayerDataOffset, playerAddress);
-        sceneMemory.Apply(state, ReadCount(), local);
+        if (!sceneMemory.TryApply(state, ReadCount(), local, localPlayer))
+        {
+            // A room reload can still be between tables; the next snapshot retries.
+            ResumeEnemies();
+            return;
+        }
         enemyLoop ??= new EnemyLoop(memory, playerAddress - GameProfile.PlayerDataOffset);
         enemyLoop.Set(state.Room is null ? EnemyMode.Native : mode);
     }
@@ -93,22 +134,44 @@ public sealed class GameBridge : IDisposable
 
     public void Constrain(PlayerState? authority)
     {
-        if (authority is null || authority.Constraint == ConstraintKind.None) { return; }
+        if (!webPull && (authority is null || authority.Constraint == ConstraintKind.None))
+        {
+            return;
+        }
+
         using var pause = memory.Pause();
+        if (webPull && authority?.Constraint != ConstraintKind.WebPull)
+        {
+            webMemory?.Release();
+            webPull = false;
+        }
+
+        if (authority is null || authority.Constraint == ConstraintKind.None) { return; }
         var local = Read();
         if (local is null || local.Level != authority.Frame.Level || !NetRules.Valid(authority.Frame)) { return; }
 
-        // Experimental PvP changes only local X/Y, as described in the wiki.
+        // Apply relay-authorized freezing or pulling without making players solid.
         var position = new byte[3];
         BinaryPrimitives.WriteInt16LittleEndian(position, authority.Frame.X);
         position[2] = authority.Frame.Y;
         if (memory.Read(levelAddress, 1)[0] != local.Level) { return; }
         memory.Write(playerAddress + GameLayout.XOffset, position);
+        if (authority.Constraint == ConstraintKind.WebPull && authority.Frame.Web is { } web)
+        {
+            webMemory!.Constrain(web);
+            webPull = true;
+        }
     }
 
     public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode)
     {
-        if (mode == InjectionMode.Observe) { Restore(); return; }
+        if (mode == InjectionMode.Observe)
+        {
+            Restore();
+            webMemory?.Restore();
+            ReleaseWebPull();
+            return;
+        }
         using var pause = memory.Pause();
         if (guests.Count > EnemyPlan.MaxGuests)
         {
@@ -130,12 +193,15 @@ public sealed class GameBridge : IDisposable
             throw new IOException("Enemy table changed; injection stopped.");
         }
         if (!guests.Any(guest => guest.Level == local.Level)) { Restore(); return; }
+        if (count is 0 or > EnemyPlan.NativeCount)
+        {
+            throw new IOException("Enemy count does not match the known layout.");
+        }
+
+        sceneMemory ??= new SceneMemory(memory, playerAddress - GameProfile.PlayerDataOffset, playerAddress);
+        sceneMemory.HideDead(count);
         if (savedSlots is null)
         {
-            if (count is 0 or > EnemyPlan.NativeCount)
-            {
-                throw new IOException("Enemy count does not match the known layout.");
-            }
             CheckRenderer();
             savedSlots = memory.Read(SlotAddress(), EnemyPlan.ReservedSize);
             savedCode = memory.Read(RenderAddress(), RenderPatch.Size);
@@ -166,16 +232,37 @@ public sealed class GameBridge : IDisposable
         memory.Write(SlotAddress(), batch);
         foreach (var patch in gapPatches) { memory.Write(patch.Address, patch.After); }
         if (!instruction.AsSpan().SequenceEqual(patchCode)) { memory.Write(RenderAddress(), patchCode); }
+        webMemory!.Update(guests.Where(guest => guest.Level == local.Level).Select(guest => guest.Web).OfType<WebState>().ToArray(), local.Level);
     }
 
     public void Dispose()
     {
-        try { Restore(); }
+        try
+        {
+            Restore();
+            webMemory?.Restore();
+        }
         finally
         {
-            try { ResumeEnemies(); }
-            finally { memory.Dispose(); }
+            try { ReleaseWebPull(); }
+            finally
+            {
+                try { ResumeEnemies(); }
+                finally { memory.Dispose(); }
+            }
         }
+    }
+
+    private void ReleaseWebPull()
+    {
+        if (!webPull)
+        {
+            return;
+        }
+
+        using var pause = memory.Pause();
+        webMemory?.Release();
+        webPull = false;
     }
 
     private long SlotAddress() => playerAddress + EnemyPlan.FirstSlot * EnemyPlan.Stride;
@@ -202,8 +289,9 @@ public sealed class GameBridge : IDisposable
 
     private void Restore()
     {
-        if (savedSlots is null) { return; }
         using var pause = memory.Pause();
+        webMemory?.TryRestore();
+        if (savedSlots is null) { return; }
         ValidateMarkers();
         if (savedCode is not null)
         {
@@ -250,7 +338,7 @@ public sealed class GameBridge : IDisposable
             || !memory.Read(RenderAddress() + RenderPatch.Size, GameProfile.RenderSuffix.Length)
                 .AsSpan().SequenceEqual(GameProfile.RenderSuffix))
         {
-            throw new IOException("Unsupported renderer. Select VGA or CGA and use DOSBox core=normal.");
+            throw new IOException("Unsupported renderer. Select VGA and use DOSBox core=normal.");
         }
     }
 

@@ -1,4 +1,5 @@
 using SpideyNet.Core;
+using SpideyNet.Tests;
 
 if (args.Length == 3 && args[0] == "--demo")
 {
@@ -46,8 +47,9 @@ Check(() => EnemyPlan.Build(data, null, GuestDescriptor)[6] == 0x5F, "Hide absen
 Check(() => EnemyPlan.MaxGuests * EnemyPlan.DescriptorSize <= (EnemyPlan.Capacity - EnemyPlan.DescriptorSlot) * EnemyPlan.Stride,
     "Descriptors fit outside the active actor range");
 Check(() => RenderPatch.Build(12).SequenceEqual(new byte[] { 0xB9, 12, 0, 0x90 }), "Patch only the renderer count instruction");
-Check(() => Math.Abs(NetRules.TickMs - 1000d / 60) < 0.001, "Target sixty updates per second");
-Check(() => NetRules.MaxRate >= 60 * 2, "Allow sixty updates with burst headroom");
+Check(() => Math.Abs(NetRules.TickMs - 1000d / 30) < 0.001, "Target thirty network updates per second");
+Check(() => NetRules.LocalTickRate == 60, "Keep local input and rendering at sixty hertz");
+Check(() => NetRules.MaxRate >= 30 * 2, "Allow thirty updates with burst headroom");
 
 var track = new RemoteTrack();
 track.Add(guest with { X = 0 }, 1000);
@@ -62,13 +64,12 @@ Check(() => track.Sample(4100)?.X == 100, "Snap across rooms");
 Check(() => InteractionRules.WebHits(guest with { Facing = 0, X = 0 }, guest with { X = 40 }), "Web reaches player ahead");
 Check(() => !InteractionRules.WebHits(guest with { Facing = 2, X = 0 }, guest with { X = 40 }), "Web respects facing");
 Check(() => !InteractionRules.WebHits(guest, guest with { Level = 3 }), "Web cannot cross rooms");
-Check(() => InteractionRules.Collides(guest with { X = 0 }, guest with { X = 80 }, guest with { X = 40 }), "Swept player collision");
-Check(() => !InteractionRules.Collides(guest with { X = 0 }, guest with { X = 80 }, guest with { X = 40, Y = 50 }), "Separate vertical collision lanes");
 SharedChecks.Run();
 VideoChecks.Run();
+FeatureChecks.Run();
 if (args.Length == 2 && args[0] == "--relay")
 {
-    await IntegrationChecks.Run(new Uri(args[1]));
+    await IntegrationChecks.RunAsync(new Uri(args[1]));
     await SharedSocketChecks.Run(new Uri(args[1]));
 }
 Console.WriteLine("All checks passed.");

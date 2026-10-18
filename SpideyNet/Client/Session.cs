@@ -21,12 +21,12 @@ internal sealed class Session
     {
         if (running is not null) { throw new InvalidOperationException("Disconnect first."); }
         lifetime = new CancellationTokenSource();
-        running = Run(processId, endpoint, room, name, mode, interactions, shared, lifetime.Token);
+        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, lifetime.Token);
     }
 
     internal void FireWeb() => relay.FireWeb();
 
-    internal async Task Disconnect()
+    internal async Task DisconnectAsync()
     {
         if (lifetime is null) { return; }
         lifetime.Cancel();
@@ -37,11 +37,11 @@ internal sealed class Session
         Volatile.Write(ref view, new SessionView("Disconnected", "", null, []));
     }
 
-    private async Task Run(int processId, Uri endpoint, string room, string name,
+    private async Task RunAsync(int processId, Uri endpoint, string room, string name,
         InjectionMode mode, InteractionMode interactions, SharedMode shared, CancellationToken token)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
-        var network = NetworkLoop(endpoint, room, name, interactions, shared, linked.Token);
+        var network = NetworkLoopAsync(endpoint, room, name, interactions, shared, linked.Token);
         try
         {
             // One worker owns discovery, reads, injection and restoration.
@@ -51,7 +51,7 @@ internal sealed class Session
                 using var timer = new PeriodicTimer(NetRules.TickInterval);
                 var tracks = new Dictionary<Guid, RemoteTrack>();
                 var sceneTrack = new SharedTrack();
-                long lastTick = -1;
+                WorldState? lastState = null;
                 while (await timer.WaitForNextTickAsync(linked.Token))
                 {
                     var local = game.Read();
@@ -82,7 +82,10 @@ internal sealed class Session
                         game.Constrain(state?.Players.FirstOrDefault(p => p.Id == state.Self));
                     }
                     var players = state?.Players.Where(p => p.Id != state.Self).OrderBy(p => p.Id).ToArray() ?? [];
-                    if (state is not null && state.Tick != lastTick)
+
+                    // A reconnect can repeat a tick number with entirely new player identities.
+                    // Each received snapshot must populate its tracks before sampling them.
+                    if (state is not null && !ReferenceEquals(state, lastState))
                     {
                         foreach (var player in players)
                         {
@@ -93,8 +96,9 @@ internal sealed class Session
                             }
                             track.Add(player.Frame, Environment.TickCount64);
                         }
-                        lastTick = state.Tick;
+                        lastState = state;
                     }
+
                     foreach (var id in tracks.Keys.Where(id => !players.Any(p => p.Id == id)).ToArray()) { tracks.Remove(id); }
                     var frames = players.Select(p => tracks[p.Id].Sample(Environment.TickCount64))
                         .OfType<GameFrame>().ToArray();
@@ -124,7 +128,7 @@ internal sealed class Session
         }
     }
 
-    private async Task NetworkLoop(Uri endpoint, string room, string name, InteractionMode interactions, SharedMode shared,
+    private async Task NetworkLoopAsync(Uri endpoint, string room, string name, InteractionMode interactions, SharedMode shared,
         CancellationToken token)
     {
         var retrySeconds = 1;

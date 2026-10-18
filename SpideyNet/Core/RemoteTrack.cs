@@ -9,7 +9,14 @@ public sealed class RemoteTrack
 
     public void Add(GameFrame frame, long now)
     {
-        if (samples.Count > 0 && samples.Last().Frame.Level != frame.Level) { samples.Clear(); }
+        // Reappearing players start a new timeline, even in the same room.
+        // Otherwise the first fresh update briefly renders their expired position.
+        if (samples.Count > 0 && (samples.Last().Frame.Level != frame.Level
+            || now - samples.Last().Time >= NetRules.StaleMs))
+        {
+            samples.Clear();
+        }
+
         samples.Enqueue((now, frame));
         while (samples.Count > MaxSamples) { samples.Dequeue(); }
     }

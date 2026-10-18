@@ -80,9 +80,9 @@ internal sealed class MainWindow : Form
         scan.Click += (_, _) => Scan();
         copy.Click += (_, _) => Clipboard.SetText(room.Text);
         connect.Click += (_, _) => Connect();
-        disconnect.Click += async (_, _) => { await session.Disconnect(); SetConnected(ConnectionState.Disconnected); };
+        disconnect.Click += async (_, _) => { await session.DisconnectAsync(); SetConnected(ConnectionState.Disconnected); };
         refresh.Tick += (_, _) => PaintState();
-        FormClosing += Close;
+        FormClosing += CloseAsync;
         Scan();
         refresh.Start();
     }
@@ -149,13 +149,13 @@ internal sealed class MainWindow : Form
         roster.EndUpdate();
     }
 
-    private async void Close(object? sender, FormClosingEventArgs args)
+    private async void CloseAsync(object? sender, FormClosingEventArgs args)
     {
         if (closing) { return; }
         args.Cancel = true;
         refresh.Stop();
         Enabled = false;
-        await session.Disconnect();
+        await session.DisconnectAsync();
         refresh.Dispose();
         closing = true;
         Close();

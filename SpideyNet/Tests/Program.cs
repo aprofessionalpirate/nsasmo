@@ -55,6 +55,8 @@ track.Add(guest with { X = 20 }, 1100);
 var sampleTime = (long)Math.Round(1050 + NetRules.TickMs * 2);
 Check(() => track.Sample(sampleTime)?.X == 10, "Interpolate between buffered samples");
 Check(() => track.Sample(4000) is null, "Expire disconnected players");
+track.Add(guest with { X = 68 }, 4000);
+Check(() => track.Sample(4000)?.X == 68, "Reappearing players do not reuse expired interpolation samples");
 track.Add(guest with { Level = 3, X = 100 }, 4100);
 Check(() => track.Sample(4100)?.X == 100, "Snap across rooms");
 Check(() => InteractionRules.WebHits(guest with { Facing = 0, X = 0 }, guest with { X = 40 }), "Web reaches player ahead");

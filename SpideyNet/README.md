@@ -18,6 +18,7 @@ dotnet run --project Client --no-build
 ```
 
 Run `./Launch-Game.ps1`, select **1: VGA**, choose English, then **1: Play New Game**.
+The launcher uses its own temporary DOSBox configuration and leaves your existing settings intact.
 VGA is the preferred target. **4: CGA** remains supported; video mode is detected automatically.
 The launcher uses `core=normal`; dynamic cores can cache patched instructions.
 Override `GameDirectory` and `DosBox` parameters for other paths.
@@ -47,7 +48,7 @@ The relay and clients target 60 Hz. Interpolation buffers two updates (about
 33 ms). Each connection has one receive worker
 and one send worker, a one-snapshot outbox, message/rate limits, keepalive
 deadlines, and a room cap. Clients reconnect with bounded backoff, expire stale
-players and interpolate positions with a 100 ms delay. WebSocket/TCP favors
+players and interpolate positions with a two-update delay. WebSocket/TCP favors
 reachability; packet loss can delay later packets. It is not UDP/QUIC transport.
 
 ## Experimental interactions

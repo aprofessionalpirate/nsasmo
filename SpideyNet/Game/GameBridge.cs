@@ -92,7 +92,8 @@ public sealed class GameBridge : IDisposable
         return sceneMemory.Read(local, ReadCount());
     }
 
-    public void SyncScene(SharedState state, EnemyMode mode = EnemyMode.Native, Guid? localPlayer = null)
+    public void SyncScene(SharedState state, EnemyMode mode = EnemyMode.Native, Guid? localPlayer = null,
+        byte[]? sampledPuzzles = null)
     {
         using var pause = memory.Pause();
         var local = Read();
@@ -102,7 +103,7 @@ public sealed class GameBridge : IDisposable
             return;
         }
         sceneMemory ??= new SceneMemory(memory, playerAddress - GameProfile.PlayerDataOffset, playerAddress);
-        if (!sceneMemory.TryApply(state, ReadCount(), local, localPlayer))
+        if (!sceneMemory.TryApply(state, ReadCount(), local, localPlayer, sampledPuzzles))
         {
             // A room reload can still be between tables; the next snapshot retries.
             ResumeEnemies();

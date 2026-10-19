@@ -89,7 +89,7 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
                 tiles.Select(tile => (byte)(tile & 0xC0)).ToArray())));
     }
 
-    internal bool TryApply(SharedState state, ushort count, GameFrame frame, Guid? localPlayer)
+    internal bool TryApply(SharedState state, ushort count, GameFrame frame, Guid? localPlayer, byte[]? sampledPuzzles)
     {
         Check(count);
         if (!SharedRules.Valid(state)) { throw new InvalidDataException("Invalid shared scene."); }
@@ -148,7 +148,9 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
         }
 
         var puzzles = memory.Read(dataAddress + PuzzleOffset, SharedRules.PuzzleBytes);
-        patches.Add((dataAddress + PuzzleOffset, SharedRules.Apply(puzzles, state.Puzzles)));
+        patches.Add((dataAddress + PuzzleOffset, sampledPuzzles is null
+            ? SharedRules.Apply(puzzles, state.Puzzles)
+            : SharedRules.Apply(puzzles, state.Puzzles, sampledPuzzles)));
         foreach (var patch in patches) { memory.Write(patch.Address, patch.Data); }
         if (state.Room is { } applied)
         {

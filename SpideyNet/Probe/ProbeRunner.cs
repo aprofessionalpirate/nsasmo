@@ -8,6 +8,13 @@ internal static class ProbeRunner
 {
     internal static async Task RunAsync(string[] args)
     {
+        if (args.Length == 5 && args[0] is "--trio" or "--trio-transitions" or "--trio-preview")
+        {
+            await TrioProbe.RunAsync(new Uri(args[1]), args.Skip(2).Select(int.Parse).ToArray(),
+                args[0] == "--trio-transitions", args[0] == "--trio-preview");
+            return;
+        }
+
         if (args.Length == 4 && args[0] == "--level-preview")
         {
             await LevelProbe.JoinAsync(new Uri(args[1]), args[2], int.Parse(args[3]));

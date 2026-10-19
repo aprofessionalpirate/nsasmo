@@ -61,7 +61,8 @@ reachability; packet loss can delay later packets. It is not UDP/QUIC transport.
 
 ## Experimental interactions
 
-Select `Experimental` under Player interaction on every client in the room.
+Player interactions default to `Experimental`. Every client in the room must
+use the same setting; choose `Disabled` to opt out. Observe mode disables them.
 Players pass through each other without collision corrections.
 Press **V** in DOSBox or click **Fire web** to freeze the nearest player ahead within 64 coordinate units
 for 1.2 seconds. The cooldown is 600 ms. Rooms and facing direction are checked
@@ -285,6 +286,18 @@ dotnet run --project Probe -- --level-pair ws://localhost:5080 <first-pid> <seco
 
 The probe connects real production sessions and damages a native enemy; use test
 games. It always disconnects both sessions before returning.
+
+Three-player diagnostics use the production session workers and require three
+distinct disposable game processes in the same screen:
+
+```powershell
+dotnet run --project Probe -- --trio ws://localhost:5080 <pid1> <pid2> <pid3>
+dotnet run --project Probe -- --trio-transitions ws://localhost:5080 <pid1> <pid2> <pid3>
+```
+
+The transition variant starts in Midnight (or retreats from Foyer). These checks
+change native enemy health, puzzles, scenery and player positions, and await
+disconnect cleanup. They are not intended for an in-progress saved game.
 
 Research: [project wiki](https://github.com/aprofessionalpirate/nsasmo/wiki),
 [sprite analysis](https://github.com/aprofessionalpirate/nsasmo/wiki/Sprite-Analysis),

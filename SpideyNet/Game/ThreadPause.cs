@@ -14,12 +14,32 @@ internal sealed class ThreadPause : IDisposable
     private const uint Signaled = 0;
     private const uint Failed = uint.MaxValue;
     private readonly List<SafeWaitHandle> threads = [];
+    private readonly Mutex transaction;
+    private bool acquired;
 
     internal ThreadPause(int processId)
     {
-        using var process = Process.GetProcessById(processId);
+        transaction = new Mutex(false, $"Local\\SpideyNet-Pause-{processId}");
         try
         {
+            // Suspending DOSBox alone does not serialize two host-side memory transactions.
+            // A named, recursive mutex also protects diagnostics and nested bridge calls.
+            try
+            {
+                acquired = transaction.WaitOne(TimeSpan.FromSeconds(5));
+            }
+            catch (AbandonedMutexException error)
+            {
+                acquired = true;
+                throw new IOException("A memory transaction ended abnormally; restart DOSBox before attaching.", error);
+            }
+
+            if (!acquired)
+            {
+                throw new IOException("Timed out waiting for another game memory transaction.");
+            }
+
+            using var process = Process.GetProcessById(processId);
             foreach (ProcessThread thread in process.Threads)
             {
                 using (thread)
@@ -97,6 +117,13 @@ internal sealed class ThreadPause : IDisposable
             thread.Dispose();
         }
         threads.Clear();
+        if (acquired)
+        {
+            transaction.ReleaseMutex();
+            acquired = false;
+        }
+
+        transaction.Dispose();
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]

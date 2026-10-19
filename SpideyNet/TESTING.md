@@ -1,3 +1,53 @@
+# Three-player feature checks - 19 October 2026
+
+Three production session workers, three distinct disposable DOSBox 0.74-3 games,
+VGA, normal CPU core at 3000 cycles, and an isolated localhost relay were used.
+The native room-start fixtures are described in the earlier migration section.
+
+| Check | Result |
+|---|---|
+| Midnight, Lift, Mummy's Revenge, Cardboard City | Three rosters, Observe storage protection, shared enemy damage, reversible puzzle changes, moving scenery and collision agreement passed |
+| Three actors on screen | TaskKit saw the local player plus two guests in each Lift game |
+| Native contact puzzle | A follower landed on Midnight's helicopter; launch and stop reached all three games |
+| Lift rider | A follower became platform driver, moved it, was carried with it, and all three collision grids agreed |
+| Interactions | Nearest target froze and expired; distant third peer stayed unaffected; players crossed without collision corrections |
+| Physical V input | TaskKit key press froze a remote player through the production session |
+| Enemy death | Native enemy became inactive in all three games before transitions |
+| Transitions | Repeated Midnight -> Foyer -> Midnight trips by two peers while the third stayed; guest visibility was checked as 0/1/2 according to room membership |
+| Ownership/rejoin | Actual room owner disconnected; surviving peers elected a new owner; rejoin restored both guests |
+| Cleanup | Same-room runs restored exact renderer, reserved bytes and native actor count; transition runs restored native renderers |
+| Three-player web sockets | Nearest target, stable attachment despite a closer third peer, retarget after room change, release and freeze isolation passed |
+| Driver stress | Nested memory transactions, competing host threads, and 3000 pause/resume cycles passed with zero failures |
+| Final verification | Release solution: zero warnings/errors; nine Avalonia/MVVM tests and all domain/real-socket checks passed; 30.3 relay snapshots/sec |
+
+Experimental player interactions are now the UI default; choosing Observe still
+disables interactions and shared-world writes.
+
+Two race guards were added. Applying a shared puzzle snapshot now preserves
+native switch bits that changed after the scene was sampled, allowing the next
+capture to publish them. Memory pause transactions now use a named recursive
+mutex per DOSBox process: suspending emulator threads alone did not stop two
+host-side bridge instances from interleaving writes. Domain checks cover newer
+On/Off input and unrelated remote changes; the driver regression verifies nested
+and concurrent callers before the existing thread-exit stress test.
+
+The native-contact fixture was aligned with the standing player's collision
+bounds. Visibility checks count reserved actors only while the extended renderer
+is active; stale unused bytes do not mean visible guests after native restoration.
+
+These are controlled integration checks, not complete level playthroughs or
+separate-Internet human play. Short TaskKit Space presses were not observed as
+native shots at this CPU speed, so sustained physical Space input remains
+unverified. Web geometry/raster, attachment and release retain deterministic and
+real-socket coverage; physical V was confirmed.
+
+Repeat with `Probe --trio <relay-uri> <pid1> <pid2> <pid3>` or, for Midnight/Foyer,
+`Probe --trio-transitions <relay-uri> <pid1> <pid2> <pid3>`. These commands change
+game state and must be used against disposable games. `--trio-preview` provides
+a 75-second keyboard observation window. Session cleanup always runs on exit.
+
+---
+
 # Avalonia migration checks - 19 October 2026
 
 Single-file packaging verified on 19 October: clean publishes contain only

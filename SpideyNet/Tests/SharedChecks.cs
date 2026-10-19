@@ -14,6 +14,17 @@ internal static class SharedChecks
         Check(() => SharedRules.Apply(patch, desired)[0] == patch[0], "Preserve native dirty bits");
         Check(() => SharedRules.Normalize(patch)[0] == 0x10, "Never transmit transient script dirty bits");
         Check(() => SharedRules.Apply(patch, initial)[0] == 0x22, "Reversible switch marks native scripts dirty");
+
+        // Simulate native input arriving between scene capture and snapshot application.
+        var later = initial.ToArray();
+        SharedRules.Set(later, new PuzzleChange(1, SwitchState.On));
+        var merged = SharedRules.Apply(later, desired, initial);
+        Check(() => SharedRules.Get(merged, 1) == SwitchState.On && SharedRules.Get(merged, 2) == SwitchState.On,
+            "Preserve newer native input while applying unrelated remote switches");
+        var released = SharedRules.Apply(initial, desired, desired);
+        Check(() => SharedRules.Get(released, 2) == SwitchState.Off,
+            "An old network snapshot cannot undo a newer native switch release");
+        Check(() => (merged[0] & 0x20) != 0, "Remote changes still mark native scripts dirty after merging input");
         Check(() => !SharedRules.Valid([new EnemyState(SharedRules.MaxMovers, 0, 0, 0, 1)]), "Reject remote mover addresses");
         var enemy = new EnemyState(3, 100, 100, 0, 192);
         var badPose = System.Text.Json.JsonSerializer.Deserialize<EnemyState>(

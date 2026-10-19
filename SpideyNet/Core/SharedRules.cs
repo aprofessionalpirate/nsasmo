@@ -46,6 +46,25 @@ public static class SharedRules
         return result;
     }
 
+    public static byte[] Apply(ReadOnlySpan<byte> local, ReadOnlySpan<byte> shared, ReadOnlySpan<byte> sampled)
+    {
+        if (local.Length != PuzzleBytes || shared.Length != PuzzleBytes || sampled.Length != PuzzleBytes)
+        {
+            throw new ArgumentException("Incomplete puzzle state.");
+        }
+
+        // A native switch can change after sampling and before applying the network snapshot.
+        // Keep those newer bits (including On -> Off) so the next capture can publish them.
+        var merged = shared.ToArray();
+        for (var index = 0; index < PuzzleBytes; index++)
+        {
+            var changed = (local[index] ^ sampled[index]) & StateMask;
+            merged[index] = (byte)((merged[index] & ~changed) | (local[index] & changed));
+        }
+
+        return Apply(local, merged);
+    }
+
     public static bool Valid(byte[]? puzzles) => puzzles?.Length == PuzzleBytes
         && puzzles.All(value => (value & ~StateMask) == 0);
 

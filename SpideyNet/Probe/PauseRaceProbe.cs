@@ -22,6 +22,7 @@ internal static class PauseRaceProbe
         {
             // Exercise the actual pause driver against threads exiting during enumeration.
             await worker.StandardOutput.ReadLineAsync();
+            await CheckSerializationAsync(worker.Id);
             for (var sample = 0; sample < Samples; sample++)
             {
                 try
@@ -66,5 +67,50 @@ internal static class PauseRaceProbe
             thread.Start();
             thread.Join();
         }
+    }
+
+    private static async Task CheckSerializationAsync(int processId)
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var first = Task.Run(() =>
+        {
+            using var pause = new ThreadPause(processId);
+            using var nested = new ThreadPause(processId);
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("The pause serialization fixture was not released.");
+            }
+        });
+        Task? second = null;
+        try
+        {
+            if (!entered.Wait(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("The pause serialization fixture did not start.");
+            }
+
+            second = Task.Run(() =>
+            {
+                using var pause = new ThreadPause(processId);
+            });
+            await Task.Delay(30);
+            if (second.IsCompleted)
+            {
+                throw new InvalidOperationException("Two host memory transactions overlapped.");
+            }
+        }
+        finally
+        {
+            release.Set();
+            await first;
+            if (second is not null)
+            {
+                await second;
+            }
+        }
+
+        Console.WriteLine("Pause transactions: nested calls succeed; competing host threads serialize.");
     }
 }

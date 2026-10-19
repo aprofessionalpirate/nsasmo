@@ -10,6 +10,15 @@ namespace SpideyNet.Client.Tests;
 public sealed class ViewModelTests
 {
     [AvaloniaFact]
+    public void DefaultsEnableExperimentalInteractions()
+    {
+        var model = new MainWindowViewModel(new FakeClientService(), new FakeClipboardService());
+        Assert.Equal(InteractionMode.Experimental, model.Interactions);
+        Assert.Equal(InjectionMode.Experimental, model.Rendering);
+        Assert.Equal(SharedMode.Experimental, model.Shared);
+    }
+
+    [AvaloniaFact]
     public void ObserveSelectionDisablesMemoryWritingOptions()
     {
         var model = new MainWindowViewModel(new FakeClientService(), new FakeClipboardService())

@@ -29,7 +29,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(FireWebCommand))]
-    private InteractionMode interactions = InteractionMode.Disabled;
+    private InteractionMode interactions = InteractionMode.Experimental;
 
     [ObservableProperty]
     private SharedMode shared = SharedMode.Experimental;

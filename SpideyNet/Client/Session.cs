@@ -90,7 +90,7 @@ internal sealed class Session
                         {
                             var enemyMode = correction.Room is { } roomState && roomState.Owner != state?.Self
                                 ? EnemyMode.Replica : EnemyMode.Native;
-                            game.SyncScene(correction, enemyMode, state?.Self);
+                            game.SyncScene(correction, enemyMode, state?.Self, scene.Puzzles);
                         }
                         else if (scene is null || state?.Shared?.Room is not { } activeRoom
                             || activeRoom.Level != scene.Frame.Level || activeRoom.Owner == state.Self)

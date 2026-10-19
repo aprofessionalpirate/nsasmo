@@ -1,0 +1,37 @@
+using SpideyNet.Client.Services;
+using SpideyNet.Game;
+
+namespace SpideyNet.Client.Tests;
+
+internal sealed class FakeClientService : IClientService
+{
+    public SessionView View { get; set; } = new("Disconnected", "", null, []);
+    internal ClientConnection? Connection { get; private set; }
+    internal int Disconnects { get; private set; }
+    internal int Shots { get; private set; }
+    internal TaskCompletionSource? DisconnectGate { get; set; }
+
+    public Task<GameProcess[]> FindGamesAsync(CancellationToken token) => Task.FromResult(new[]
+    {
+        new GameProcess(11, "11 · First DOSBox"), new GameProcess(22, "22 · Second DOSBox")
+    });
+
+    public void Connect(ClientConnection connection)
+    {
+        Connection = connection;
+        View = new SessionView("Connected", "Midnight", null, []);
+    }
+
+    public async Task DisconnectAsync()
+    {
+        Disconnects++;
+        if (DisconnectGate is { } gate)
+        {
+            await gate.Task;
+        }
+
+        View = new SessionView("Disconnected", "", null, []);
+    }
+
+    public void FireWeb() => Shots++;
+}

@@ -8,6 +8,18 @@ internal static class ProbeRunner
 {
     internal static async Task RunAsync(string[] args)
     {
+        if (args.Length == 4 && args[0] == "--level-preview")
+        {
+            await LevelProbe.JoinAsync(new Uri(args[1]), args[2], int.Parse(args[3]));
+            return;
+        }
+
+        if (args.Length == 4 && args[0] == "--level-pair")
+        {
+            await LevelProbe.RunAsync(new Uri(args[1]), int.Parse(args[2]), int.Parse(args[3]));
+            return;
+        }
+
         if (args.Length == 1 && args[0] == "--pause-race")
         {
             await PauseRaceProbe.RunAsync();

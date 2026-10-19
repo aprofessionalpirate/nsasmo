@@ -15,7 +15,7 @@ public sealed class GameBridge : IDisposable
     private readonly ProcessMemory memory;
     private readonly GameInput input;
     private long playerAddress;
-    private long levelAddress;
+    private long roomHeaderAddress;
     private byte[]? savedSlots;
     private byte ownedLevel;
     private ushort ownedCount;
@@ -34,7 +34,7 @@ public sealed class GameBridge : IDisposable
         try
         {
             Locate(token);
-            observedLevel = memory.Read(levelAddress, 1)[0];
+            observedLevel = memory.Read(CurrentRoomAddress(), 1)[0];
             roomChangedAt = Environment.TickCount64 - RoomSettleMs;
         }
         catch { memory.Dispose(); throw; }
@@ -48,9 +48,12 @@ public sealed class GameBridge : IDisposable
             throw new IOException("SpideyNet requires VGA. Select VGA in the game's video menu.");
         }
 
-        var level = memory.Read(levelAddress, 1)[0];
+        var level = memory.Read(CurrentRoomAddress(), 1)[0];
         var data = memory.Read(playerAddress, GameLayout.RecordSize);
-        if (level != memory.Read(levelAddress, 1)[0]) { return null; }
+        if (level != memory.Read(CurrentRoomAddress(), 1)[0])
+        {
+            return null;
+        }
         var frame = GameLayout.Decode(data, level);
         if (frame is null || !LevelNames.Matches(level, Title))
         {
@@ -71,12 +74,12 @@ public sealed class GameBridge : IDisposable
             return null;
         }
 
-        webMemory ??= new WebMemory(memory, playerAddress - GameProfile.PlayerDataOffset, levelAddress);
+        webMemory ??= new WebMemory(memory, playerAddress - GameProfile.PlayerDataOffset, CurrentRoomAddress());
         return frame with { Web = webMemory.Read(data), WebHeld = (data[1] & 0x10) != 0 };
     }
 
     public string Title => Encoding.ASCII.GetString(memory.Read(
-        levelAddress + GameLayout.TitleOffset, GameLayout.TitleSize)).Trim();
+        roomHeaderAddress + GameLayout.TitleOffset, GameLayout.TitleSize)).Trim();
 
     public PlayerAction ReadAction() => input.Poll();
 
@@ -154,7 +157,10 @@ public sealed class GameBridge : IDisposable
         var position = new byte[3];
         BinaryPrimitives.WriteInt16LittleEndian(position, authority.Frame.X);
         position[2] = authority.Frame.Y;
-        if (memory.Read(levelAddress, 1)[0] != local.Level) { return; }
+        if (memory.Read(CurrentRoomAddress(), 1)[0] != local.Level)
+        {
+            return;
+        }
         memory.Write(playerAddress + GameLayout.XOffset, position);
         if (authority.Constraint == ConstraintKind.WebPull && authority.Frame.Web is { } web)
         {
@@ -222,7 +228,11 @@ public sealed class GameBridge : IDisposable
 
         // Extend drawing only; physics and scripts keep their original actor count.
         ValidateMarkers();
-        if (memory.Read(levelAddress, 1)[0] != ownedLevel) { Restore(); return; }
+        if (memory.Read(CurrentRoomAddress(), 1)[0] != ownedLevel)
+        {
+            Restore();
+            return;
+        }
         var instruction = memory.Read(RenderAddress(), RenderPatch.Size);
         var patchCode = RenderPatch.Build(EnemyPlan.RenderCount);
         if (!instruction.AsSpan().SequenceEqual(savedCode) && !instruction.AsSpan().SequenceEqual(patchCode))
@@ -305,7 +315,7 @@ public sealed class GameBridge : IDisposable
             memory.Write(RenderAddress(), savedCode);
             savedCode = null;
         }
-        if (memory.Read(levelAddress, 1)[0] != ownedLevel
+        if (memory.Read(CurrentRoomAddress(), 1)[0] != ownedLevel
             || ReadCount() != ownedCount)
         {
             Abandon();
@@ -326,6 +336,9 @@ public sealed class GameBridge : IDisposable
 
     private void Abandon() { savedSlots = null; savedCode = null; ownedCount = 0; gapPatches.Clear(); }
 
+    // The room header starts with a room-dependent value, not its identity (for example, Mummy has 8).
+    private long CurrentRoomAddress() => playerAddress - GameProfile.PlayerDataOffset + GameProfile.CurrentRoomOffset;
+
     private long RenderAddress() => playerAddress - GameProfile.PlayerDataOffset + GameProfile.CodeFromData
         + GameProfile.RenderOffset + GameProfile.CountInstruction;
 
@@ -345,7 +358,7 @@ public sealed class GameBridge : IDisposable
     private void ValidateMarkers()
     {
         if (!memory.Read(playerAddress - PlayerMarker.Length, PlayerMarker.Length).AsSpan().SequenceEqual(PlayerMarker)
-            || !memory.Read(levelAddress - GameLayout.LevelOffset - LevelMarker.Length,
+            || !memory.Read(roomHeaderAddress - GameLayout.LevelOffset - LevelMarker.Length,
                 LevelMarker.Length).AsSpan().SequenceEqual(LevelMarker))
         {
             throw new IOException("Game memory moved; detach and reattach.");
@@ -364,7 +377,8 @@ public sealed class GameBridge : IDisposable
             var level = chunk.Address + levelIndex + LevelMarker.Length + GameLayout.LevelOffset;
             try
             {
-                var frame = GameLayout.Decode(memory.Read(player, GameLayout.RecordSize), memory.Read(level, 1)[0]);
+                var currentRoom = memory.Read(player - GameProfile.PlayerDataOffset + GameProfile.CurrentRoomOffset, 1)[0];
+                var frame = GameLayout.Decode(memory.Read(player, GameLayout.RecordSize), currentRoom);
                 var title = Encoding.ASCII.GetString(memory.Read(level + GameLayout.TitleOffset, GameLayout.TitleSize)).Trim();
                 if (frame is null || !NetRules.Valid(frame) || !LevelNames.Matches(frame.Level, title)) { continue; }
                 candidates.Add((player, level));
@@ -375,6 +389,6 @@ public sealed class GameBridge : IDisposable
         {
             throw new IOException($"Found {candidates.Count} valid layouts. Start a game in DOSBox, then attach.");
         }
-        (playerAddress, levelAddress) = candidates.Single();
+        (playerAddress, roomHeaderAddress) = candidates.Single();
     }
 }

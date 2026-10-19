@@ -1,6 +1,12 @@
 # SpideyNet
 
-.NET 10 rewrite with VGA-only support. The original project is unchanged.
+.NET 10 rewrite with a VGA-only game bridge and an Avalonia 12.1.4 desktop client.
+The UI uses CommunityToolkit.Mvvm, compiled bindings and asynchronous commands.
+The game bridge requires Windows; the original project is unchanged.
+
+Package versions for every SpideyNet project are maintained in
+`Directory.Packages.props` using NuGet Central Package Management. Add package
+versions there and keep project `PackageReference` entries versionless.
 
 ## Run locally
 
@@ -205,7 +211,11 @@ handoff, room reentry and death.
 Two DOSBox instances verified helicopter displacement with matching collision
 grids, follower switch contact, switch changes, follower damage, enemy death
 and Midnight-to-Foyer handoff. Both renderer instructions were restored.
-Other rooms, simultaneous human riders and long sessions remain unverified.
+Lift (room 3) and Mummy's Revenge (room 17) also passed production-session
+checks for Observe, guest rendering, shared enemy damage, collision flags and
+exact renderer/reserved-storage/native-count restoration. These used disposable
+level-start fixtures, not full playthroughs. Other rooms, simultaneous human
+riders and long sessions remain unverified. See TESTING.md for coverage.
 
 VGA checks displayed a second Spider-Man and displaced Midnight's helicopter.
 Collision tiles, all four background planes, actor storage and the renderer restored
@@ -231,13 +241,17 @@ dotnet publish Client -c Release -o publish/client -m:1
 dotnet publish Relay -c Release -o publish/relay -m:1
 ```
 
-The client requires the .NET 10 Desktop Runtime; the relay requires the
+The client requires the .NET 10 runtime; the relay requires the
 ASP.NET Core 10 runtime. Keep each published directory intact.
 
 ## Layers
 
 ```text
-Desktop UI
+Avalonia views (compiled bindings)
+    |
+View models (commands and observable state)
+    |
+Client / clipboard services
     |
 Session service
     +-- Game bridge ---- Process memory driver ---- DOSBox
@@ -247,6 +261,24 @@ Session service
 `Core` contains protocol and gameplay rules. `Transport` contains socket code.
 `Game` encapsulates Windows memory access. `Client` owns UI/session lifetime.
 `Relay` owns room membership and interaction decisions. `Probe` is diagnostic.
+Views contain only window lifetime, screen sizing and UI refresh cadence. View
+models depend on service interfaces; platform clipboard and process discovery
+stay in service implementations. Shutdown awaits native restoration before exit.
+
+Run the headless Avalonia and MVVM tests with:
+
+```powershell
+dotnet test Client.Tests -m:1
+```
+
+To check two disposable games in the same room (requires a running relay):
+
+```powershell
+dotnet run --project Probe -- --level-pair ws://localhost:5080 <first-pid> <second-pid>
+```
+
+The probe connects real production sessions and damages a native enemy; use test
+games. It always disconnects both sessions before returning.
 
 Research: [project wiki](https://github.com/aprofessionalpirate/nsasmo/wiki),
 [sprite analysis](https://github.com/aprofessionalpirate/nsasmo/wiki/Sprite-Analysis),

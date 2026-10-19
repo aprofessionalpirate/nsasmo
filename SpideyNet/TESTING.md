@@ -1,3 +1,46 @@
+# Avalonia migration checks - 19 October 2026
+
+Windows, .NET SDK 10.0.402, Avalonia 12.1.4, DOSBox 0.74-3,
+normal CPU core at 3000 cycles, VGA, localhost relay.
+
+| Check | Result |
+|---|---|
+| Release build and publish | Entire solution built with zero warnings/errors; Client and Probe published; published client launched and visually checked |
+| Domain and relay regressions | All existing checks passed, including web pull/release, invalid input, ownership, shared puzzles, room reentry and death; 30.1 relay snapshots/sec |
+| Avalonia compiled XAML and MVVM | Eight headless tests passed: input/command binding, lifecycle, clipboard command, configuration locking, validation, stopped-session recovery and stable roster rows |
+| Actual desktop client | TaskKit selected a disposable DOSBox, connected, displayed a real peer, removed its departing roster row, disconnected and closed successfully |
+| High DPI | Window fits the 1920x1080 desktop at 150% scaling; scrollable content and complete labels |
+| Lift (3) | Observe without actor/renderer writes; two guest renderers; two native enemies/two scenery objects; shared damage; collision flags agree; exact reserved bytes, renderer and native counts restored |
+| Mummy's Revenge (17) | Same checks; one enemy/one scenery object; shared damage; exact native storage restoration |
+
+Mummy's Revenge exposed a discovery bug: the old room-header byte is 8 in this
+room, whereas the current room is 17. The bridge now reads the native current-room
+variable at DS:007F for discovery, updates, transition handling and web cleanup.
+The header marker and exact room title remain independent validation checks.
+
+The Mummy fire pit animates tile artwork independently in each game. Comparing
+all tile bytes incorrectly reported a collision mismatch. Diagnostics now retain
+the exact tile hash and also expose a collision-flags hash (upper two bits), which
+the generic room probe compares. This does not overwrite native animation.
+
+UI fixes include clearing the location/owner on disconnect, assigning the entire
+owner/location string once to avoid blinking, unlocking reconnect after worker
+failure, and awaiting restoration before the window closes. The shutdown test
+holds cleanup pending and verifies the window stays open until it completes.
+
+These extra rooms used copies under ignored `.research/level-fixtures`. Only the
+disposable executable's new-game room immediate (CS:04BF) and menu entry jump
+(CS:015B -> CS:025A) were patched to enter a native initialized room without a
+full playthrough. VGA and English were selected through TaskKit. Original game
+assets and the user's existing game/client processes were left untouched.
+These are room integration checks, not complete puzzle/playthrough coverage.
+
+Repeat UI tests using `dotnet test Client.Tests -m:1` and native room checks using
+`Probe --level-pair ws://localhost:5080 <first-pid> <second-pid>` against disposable
+games. The latter applies enemy damage and awaits both session disconnects.
+
+---
+
 # Feature test run - 18 October 2026
 
 Windows, .NET SDK 10.0.402, DOSBox 0.74-3, normal CPU core, VGA.

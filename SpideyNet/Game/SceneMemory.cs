@@ -79,9 +79,14 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
                 (record[3] & ActiveFlag) == 0 ? TriggerKind.Contact : TriggerKind.Web,
                 Script(BinaryPrimitives.ReadUInt16LittleEndian(record.AsSpan(6)))));
         }
+        // Native animated tiles (for example, Mummy's fire) change their artwork independently.
+        // Compare collision flags separately while preserving the exact tile hash for restoration checks.
+        var tiles = memory.Read(dataAddress + TileOffset, TileBytes);
         return new SceneStatus(scene, triggers.ToArray(), Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(memory.Read(dataAddress + TileOffset, TileBytes))),
-            ((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]).ToString(), movers.PixelHash());
+            System.Security.Cryptography.SHA256.HashData(tiles)),
+            ((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]).ToString(), movers.PixelHash(),
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                tiles.Select(tile => (byte)(tile & 0xC0)).ToArray())));
     }
 
     internal bool TryApply(SharedState state, ushort count, GameFrame frame, Guid? localPlayer)

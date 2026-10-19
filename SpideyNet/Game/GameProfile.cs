@@ -3,6 +3,7 @@ namespace SpideyNet.Game;
 internal static class GameProfile
 {
     internal const int PlayerDataOffset = 0x92B1;
+    internal const int CurrentRoomOffset = 0x7F;
     internal const int CodeFromData = 0x1D360;
     internal const int RenderOffset = 0x3497;
     internal const int CountInstruction = 3;

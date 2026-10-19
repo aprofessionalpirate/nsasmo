@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Client/Client.csproj" />
+  <Project Path="Client.Tests/Client.Tests.csproj" />
   <Project Path="Core/Core.csproj" />
   <Project Path="Game/Game.csproj" />
   <Project Path="Probe/Probe.csproj" />

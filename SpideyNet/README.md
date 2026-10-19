@@ -234,15 +234,21 @@ players have not yet tested PvP in separate DOSBox instances.
 Desktop disconnect was also checked after relay loss; cancellation returns to
 the disconnected UI without blocking its thread.
 
-Release output is in `publish/client` and `publish/relay` after publishing:
+Framework-dependent single-file Windows x64 executables are published to
+`publish/client/Client.exe` and `publish/relay/Relay.exe`:
 
 ```powershell
 dotnet publish Client -c Release -o publish/client -m:1
 dotnet publish Relay -c Release -o publish/relay -m:1
 ```
 
-The client requires the .NET 10 runtime; the relay requires the
-ASP.NET Core 10 runtime. Keep each published directory intact.
+Distribute just the respective executable. The client requires the x64 .NET 10
+runtime; the relay requires the x64 ASP.NET Core 10 runtime. Neither bundles a
+runtime. The client bundles Avalonia's native libraries, which .NET extracts to
+its temporary bundle cache on first launch. Debug symbols stay in build output.
+When replacing an older folder deployment, remove its obsolete companion files.
+The relay can target another OS/architecture with `-r`, for example
+`dotnet publish Relay -c Release -r linux-x64 -o publish/relay-linux -m:1`.
 
 ## Layers
 

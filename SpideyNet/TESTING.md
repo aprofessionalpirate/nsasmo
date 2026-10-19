@@ -1,5 +1,13 @@
 # Avalonia migration checks - 19 October 2026
 
+Single-file packaging verified on 19 October: clean publishes contain only
+`Client.exe` (28,570,342 bytes) and `Relay.exe` (271,793 bytes), respectively.
+Both evaluate `PublishSingleFile=true`, `SelfContained=false`, `RuntimeIdentifier=win-x64`.
+TaskKit verified the standalone published client opens and discovers DOSBox.
+The standalone relay passed `/health` and the full domain/real-socket regression
+suite on isolated port 5091 (30.7 snapshots/sec). Its test process was stopped.
+The original relay and game processes were left running.
+
 Windows, .NET SDK 10.0.402, Avalonia 12.1.4, DOSBox 0.74-3,
 normal CPU core at 3000 cycles, VGA, localhost relay.
 

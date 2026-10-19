@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="ExcludeSingleFileDebugSymbols" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <!-- Referenced projects and native packages can still contribute loose PDBs. -->
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+</Project>

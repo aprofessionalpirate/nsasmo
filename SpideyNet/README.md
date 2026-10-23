@@ -235,8 +235,16 @@ players have not yet tested PvP in separate DOSBox instances.
 Desktop disconnect was also checked after relay loss; cancellation returns to
 the disconnected UI without blocking its thread.
 
-Framework-dependent single-file Windows x64 executables are published to
-`publish/client/Client.exe` and `publish/relay/Relay.exe`:
+Client and relay publish as framework-dependent single-file Windows x64 executables.
+
+For both executables in one folder, run `Build-Release.bat` from the repository
+root (or double-click it). It requires the .NET 10 SDK and creates
+`outputs/Client.exe` and `outputs/Relay.exe` beside the batch file. It works from
+any current directory and stops with a nonzero exit code if either publish fails.
+Build intermediates go into `artifacts/release`; both generated folders are ignored
+by Git. The executables retain the single-file, framework-dependent settings.
+
+To publish the projects separately from this folder:
 
 ```powershell
 dotnet publish Client -c Release -o publish/client -m:1

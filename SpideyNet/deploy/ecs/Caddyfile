@@ -1,0 +1,13 @@
+{
+    default_sni {$RELAY_PUBLIC_IP}
+}
+
+https://{$RELAY_PUBLIC_IP} {
+    tls {
+        issuer acme https://acme-v02.api.letsencrypt.org/directory {
+            profile shortlived
+        }
+    }
+
+    reverse_proxy 127.0.0.1:8080
+}

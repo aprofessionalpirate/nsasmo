@@ -1,0 +1,194 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: One public Fargate relay task with Caddy; no load balancer or NAT gateway.
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public IPv4 subnet in VpcId with a route to an internet gateway.
+  ImageTag:
+    Type: String
+    Default: initial
+    AllowedPattern: '[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}'
+  DesiredCount:
+    Type: Number
+    Default: 0
+    AllowedValues: [0, 1]
+  ExecutionBoundaryArn:
+    Type: String
+    AllowedPattern: 'arn:aws:iam::[0-9]{12}:policy/SpideyNetEcsExecutionBoundary'
+Resources:
+  RelayRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: !Sub '${AWS::StackName}-relay'
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+  CaddyRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: !Sub '${AWS::StackName}-caddy'
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/spideynet/${AWS::StackName}'
+      RetentionInDays: 7
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-execution'
+      PermissionsBoundary: !Ref ExecutionBoundaryArn
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:*'
+      Policies:
+        - PolicyName: PullImagesAndLog
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource:
+                  - !GetAtt RelayRepository.Arn
+                  - !GetAtt CaddyRepository.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt Logs.Arn
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref AWS::StackName
+  Firewall:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTPS and ACME validation only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+  Task:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-relay'
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: relay
+          Image: !Sub '${RelayRepository.RepositoryUri}:${ImageTag}'
+          Essential: true
+          ReadonlyRootFilesystem: true
+          Environment:
+            - Name: ASPNETCORE_URLS
+              Value: http://127.0.0.1:8080
+          LinuxParameters:
+            Capabilities:
+              Drop: [ALL]
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: relay
+              mode: non-blocking
+              max-buffer-size: 1m
+        - Name: caddy
+          Image: !Sub '${CaddyRepository.RepositoryUri}:${ImageTag}'
+          Essential: true
+          DependsOn:
+            - ContainerName: relay
+              Condition: START
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+            - ContainerPort: 443
+              Protocol: tcp
+          LinuxParameters:
+            Capabilities:
+              Drop: [ALL]
+          # Allow the non-root proxy to bind HTTP/HTTPS without Linux capabilities.
+          SystemControls:
+            - Namespace: net.ipv4.ip_unprivileged_port_start
+              Value: '0'
+          HealthCheck:
+            Command: [CMD-SHELL, 'wget -q -T 5 -O /dev/null http://127.0.0.1:8080/health || exit 1']
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 60
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: caddy
+              mode: non-blocking
+              max-buffer-size: 1m
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub '${AWS::StackName}-relay'
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref Task
+      LaunchType: FARGATE
+      PlatformVersion: '1.4.0'
+      DesiredCount: !Ref DesiredCount
+      # Stop the old game before starting another independent in-memory room server.
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: [!Ref SubnetId]
+          SecurityGroups: [!Ref Firewall]
+Outputs:
+  RelayRepositoryUri:
+    Value: !GetAtt RelayRepository.RepositoryUri
+  CaddyRepositoryUri:
+    Value: !GetAtt CaddyRepository.RepositoryUri
+  ClusterName:
+    Value: !Ref Cluster
+  ServiceName:
+    Value: !GetAtt Service.Name
+  LogGroup:
+    Value: !Ref Logs

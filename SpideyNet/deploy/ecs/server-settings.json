@@ -1,0 +1,8 @@
+{
+  "AccountId": "YOUR_AWS_ACCOUNT_ID",
+  "Region": "ap-southeast-2",
+  "Profile": "spideynet",
+  "StackName": "spideynet-ecs",
+  "VpcId": "YOUR_VPC_ID",
+  "SubnetId": "YOUR_SUBNET_ID"
+}

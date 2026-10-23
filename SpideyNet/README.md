@@ -38,6 +38,49 @@ Remote actors use their own sprite frames and this process's graphics assets.
 Independent standing/walking animations and ceiling poses were verified in two
 VGA games. Space-fired web lines are shared with other players in the same screen.
 
+## Host the relay with Docker
+
+Install Docker Desktop and use Linux containers. From the repository root:
+
+```powershell
+docker compose -f SpideyNet/compose.yaml up -d --build
+Invoke-RestMethod http://127.0.0.1:5080/health
+```
+
+The health response reports protocol 5. Use `ws://127.0.0.1:5080` in the client.
+Only the relay runs in Docker; DOSBox and the desktop client remain on Windows.
+The server needs no host .NET installation. The client still needs its runtime.
+
+The default port binding accepts connections only from this PC. It does not
+enable Internet access. For trusted LAN play, explicitly select this PC's private
+IPv4 address before starting (replace the example address):
+
+```powershell
+$env:RELAY_BIND_IP = "192.168.1.50"
+docker compose -f SpideyNet/compose.yaml up -d --build
+Remove-Item Env:RELAY_BIND_IP
+```
+
+Players then use `ws://192.168.1.50:5080`. Allow inbound TCP 5080 from the local
+subnet on the Windows Firewall Private profile if needed. LAN traffic and room
+keys are unencrypted. To return to local-only hosting, run the first command
+again with `RELAY_BIND_IP` unset; Compose recreates the port mapping.
+
+```powershell
+docker compose -f SpideyNet/compose.yaml logs -f relay
+docker compose -f SpideyNet/compose.yaml down
+```
+
+The container runs as a non-root user with a read-only filesystem, dropped Linux
+capabilities, bounded logs, and memory/CPU/process limits. It mounts no host files
+or Docker socket. Docker reduces access to the host; it does not make a public
+service risk-free. Keep Docker Desktop updated. This setup provides no HTTPS;
+Internet hosting still requires a trusted TLS endpoint and `wss://`.
+
+Run one relay container. Restarting/rebuilding it disconnects players and clears
+rooms and shared progress. Rebuild with `up -d --build` to pick up relay and base
+image updates; matching clients must use the same protocol version.
+
 ## Play on a local network
 
 On the relay computer, bind to its LAN address instead of localhost:
@@ -68,6 +111,13 @@ Run Relay on a publicly reachable host behind HTTPS with WebSocket
 forwarding. Use `wss://your-host` in every client. Clients make outbound
 connections; no player port forwarding or UDP hole punching is required.
 The relay host must be reachable. No hosted service is provisioned here.
+
+For a single-task AWS deployment without a domain or load balancer, see
+[the ECS Fargate trial](deploy/ecs/README.md). Its public IP changes when the task
+is replaced. It provisions billable resources only when its deployment script runs.
+Use [Run-Server.bat](../Run-Server.bat) at the repository root to build and host the
+current source. [Stop-Server.bat](../Stop-Server.bat) removes the ECS deployment,
+logs and image repositories. The next run rebuilds and recreates them.
 
 Room keys are bearer secrets. The client generates a 96-bit random key.
 Share it privately. Avoid logging `/play` query strings at the reverse proxy.

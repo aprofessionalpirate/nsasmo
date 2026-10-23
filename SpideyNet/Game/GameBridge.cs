@@ -25,7 +25,6 @@ public sealed class GameBridge : IDisposable
     private const int RoomSettleMs = 100;
     private byte observedLevel;
     private long roomChangedAt;
-    private bool webPull;
 
     public GameBridge(int processId, CancellationToken token)
     {
@@ -138,19 +137,12 @@ public sealed class GameBridge : IDisposable
 
     public void Constrain(PlayerState? authority)
     {
-        if (!webPull && (authority is null || authority.Constraint == ConstraintKind.None))
+        if (authority is null || authority.Constraint == ConstraintKind.None)
         {
             return;
         }
 
         using var pause = memory.Pause();
-        if (webPull && authority?.Constraint != ConstraintKind.WebPull)
-        {
-            webMemory?.Release();
-            webPull = false;
-        }
-
-        if (authority is null || authority.Constraint == ConstraintKind.None) { return; }
         var local = Read();
         if (local is null || local.Level != authority.Frame.Level || !NetRules.Valid(authority.Frame)) { return; }
 
@@ -166,7 +158,6 @@ public sealed class GameBridge : IDisposable
         if (authority.Constraint == ConstraintKind.WebPull && authority.Frame.Web is { } web)
         {
             webMemory!.Constrain(web);
-            webPull = true;
         }
     }
 
@@ -176,7 +167,6 @@ public sealed class GameBridge : IDisposable
         {
             Restore();
             webMemory?.Restore();
-            ReleaseWebPull();
             return;
         }
         using var pause = memory.Pause();
@@ -255,25 +245,9 @@ public sealed class GameBridge : IDisposable
         }
         finally
         {
-            try { ReleaseWebPull(); }
-            finally
-            {
-                try { ResumeEnemies(); }
-                finally { memory.Dispose(); }
-            }
+            try { ResumeEnemies(); }
+            finally { memory.Dispose(); }
         }
-    }
-
-    private void ReleaseWebPull()
-    {
-        if (!webPull)
-        {
-            return;
-        }
-
-        using var pause = memory.Pause();
-        webMemory?.Release();
-        webPull = false;
     }
 
     private long SlotAddress() => playerAddress + EnemyPlan.FirstSlot * EnemyPlan.Stride;

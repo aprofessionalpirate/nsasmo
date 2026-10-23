@@ -253,3 +253,30 @@ Midnight game passed 30 pull/render/release cycles with renderer, reserved guest
 storage and native web state restored. This uses synthetic authorized pull frames,
 not a physical Space press. Client failures now log full exceptions and native
 operation names for any recurrence.
+
+## Remote web animation regression (23 October 2026)
+
+The supplied nine-second Lift recording shows a leftward web, abrupt player
+position changes and a brief corrupted sprite near the upper-left edge.
+The old tether driver forcibly set actor +17 bit 1 on every correction and
+cleared it on release. That bit also changes native animation-script parsing;
+it cannot safely be treated as a standalone web-render switch.
+
+A replay of the actual DOS instructions from a saved Lift memory snapshot
+reproduced the failure when a held shot expired. At frame 106 the old writes
+changed the animation pointer from the normal sequence to a misaligned record,
+producing pose 36 (outside the player's range) and X=-2 from relay X=104.
+Without flag writes, the same transition produced valid poses 24, 8 and 9,
+then resumed the shot normally. An 18,000-frame replay passed repeated shot
+timeouts without invalid player poses or large position jumps. The driver now redirects coordinates only for
+an already active native shot and leaves animation flags and release to the game.
+
+The Windows `--web` probe now checks that a relay tether cannot activate an idle
+native animation. The `--web-stress` probe retains its repeated idle correction,
+guest rendering and restoration checks. Both require an idle Midnight fixture.
+Additional isolated driver checks cover 28 input/animation-flag combinations and
+verify that only the eight coordinate bytes of an active shot can change.
+The complete domain and two-/three-player socket suites also passed.
+
+This is a native-code replay and memory-driver regression, not yet confirmation
+of the corrected behavior in a new recording from the two human players.

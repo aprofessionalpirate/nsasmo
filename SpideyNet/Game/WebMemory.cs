@@ -30,20 +30,20 @@ internal sealed class WebMemory(ProcessMemory memory, long dataAddress, long lev
             throw new InvalidDataException("Invalid web attachment geometry.");
         }
 
+        // Bit 1 also changes the native animation script's record length.
+        // Only redirect an existing shot; forcing that bit corrupts later animations.
+        var actor = memory.Read(dataAddress + GameProfile.PlayerDataOffset, 18);
+        if ((actor[17] & 2) == 0 || (actor[1] & 0x80) == 0)
+        {
+            return;
+        }
+
         var bytes = new byte[8];
         BinaryPrimitives.WriteInt16LittleEndian(bytes, web.EndX);
         BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(2), web.EndY);
         BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(4), web.OriginX);
         BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(6), web.OriginY);
         memory.Write(dataAddress + CoordinatesOffset, bytes);
-        var flags = dataAddress + GameProfile.PlayerDataOffset + 17;
-        memory.Write(flags, [(byte)(memory.Read(flags, 1)[0] | 2)]);
-    }
-
-    internal void Release()
-    {
-        var flags = dataAddress + GameProfile.PlayerDataOffset + 17;
-        memory.Write(flags, [(byte)(memory.Read(flags, 1)[0] & ~2)]);
     }
 
     internal void Update(IReadOnlyList<WebState> webs, byte level)

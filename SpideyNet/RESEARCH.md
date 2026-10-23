@@ -31,6 +31,13 @@ DS:`0x965C`/`0x965E` for the origin. Actor +17 bit 1 enables drawing.
 CS:`0x3944` draws the clipped line in VGA. Protocol 5 shares bounded endpoints;
 remote lines are painted into the native playfield backing buffer.
 
+Actor +17 bit 1 also controls animation-script parsing: CS:`0x0918` consumes
+an extra two-byte web-origin field when it is set. It is not an independent
+render toggle. The bridge must never set or clear it. Redirecting a shot is
+permitted only while that native bit and actor +1 bit 7 (active shot) are set;
+shot creation, timeout and release remain owned by the native animation.
+Forcing the bit after a shot expires misaligns the next animation record.
+
 The actor loop uses BP at actor +1:
 
 ```asm
@@ -65,7 +72,7 @@ The draw loop is independent:
 
 SpideyNet replaces only the four-byte count instruction with
 `B9 0C 00 90` (`mov cx,12; nop`). The ordinary count stays unchanged.
-Guest actors occupy indexes 5–11. Private inactive descriptors occupy the
+Guest actors occupy indexes 5â€“11. Private inactive descriptors occupy the
 unused storage starting at index 12. Unused gap sprites are hidden without
 replacing their web-related fields. Code and data writes occur while DOSBox
 threads are suspended; normal disconnect restores the original instruction.

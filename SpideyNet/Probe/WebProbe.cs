@@ -15,6 +15,11 @@ internal static class WebProbe
             throw new InvalidOperationException("Run the web driver check in Midnight.");
         }
 
+        if (before.Web is not null || before.WebHeld)
+        {
+            throw new InvalidOperationException("Release Space and let the native shot finish before running the web driver check.");
+        }
+
         try
         {
             if (stress)
@@ -30,6 +35,12 @@ internal static class WebProbe
                     {
                         game.Constrain(new PlayerState(Guid.Empty, "Web stress", before with { Web = tether },
                             tick + 1, ConstraintKind.WebPull));
+                        var local = game.Read();
+                        if (local is null || local.Web is not null)
+                        {
+                            throw new InvalidOperationException("A tether correction changed the idle native animation.");
+                        }
+
                         game.Render([guest with { Web = tether }], InjectionMode.Experimental);
                         await Task.Delay(NetRules.LocalTickInterval, stop.Token);
                     }
@@ -49,24 +60,26 @@ internal static class WebProbe
                 return;
             }
 
-            // A relay tether must use the same native geometry that ordinary Space shots publish.
+            // An idle animation must stay native even when the relay requests a tether.
+            // Forcing its web bit changes script parsing and can corrupt the next pose.
             var web = new WebState(140, 100, 80, 140);
             game.Constrain(new PlayerState(Guid.Empty, "Web driver", before with { X = 80, Y = 140, Web = web },
                 1, ConstraintKind.WebPull));
             var active = game.Read();
-            if (active?.Web != web)
+            if (active is null || active.Web is not null)
             {
-                throw new InvalidOperationException("The native web coordinates did not round-trip through the driver.");
+                throw new InvalidOperationException("A relay correction forced an idle animation into a native web shot.");
             }
 
             game.Constrain(null);
-            if (game.Read()?.Web is not null)
+            var released = game.Read();
+            if (released is null || released.Web is not null)
             {
-                throw new InvalidOperationException("Releasing the relay tether left the native web active.");
+                throw new InvalidOperationException("Releasing the relay tether changed the native animation's web state.");
             }
 
             await Task.Delay(50, stop.Token);
-            Console.WriteLine("Native web driver: coordinates round-trip and tether release passed.");
+            Console.WriteLine("Native web driver: idle animation ownership and tether release passed.");
         }
         finally
         {

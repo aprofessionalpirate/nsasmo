@@ -110,6 +110,11 @@ the bridge rejects every other value before accessing graphics.
 VGA uses BIOS mode `0x0D` (320x200, 16 colors), with a VGA palette set through
 BIOS `0x1010`. The renderer count instruction remains CS:`0x349A`.
 
+The native VGA palette maps index 3 to white (RGB DAC values 56,56,56), while
+index 15 is yellow (56,48,0). The palette map is at DS:`0x9779` and RGB values
+at DS:`0x978A`. Web pixels therefore use index 3, with the two high backing
+planes cleared and two low planes set, replacing any background colour.
+
 CS:`0x32A2` builds the VGA background from 32-byte tiles: eight bytes for each
 of four planes. Each plane contains 176 rows of 32 bytes (`0x1600` bytes).
 The complete backing buffer is `0x5800` bytes. CS:`0x3242` copies these planes

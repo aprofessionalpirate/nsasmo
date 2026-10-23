@@ -5,6 +5,7 @@ namespace SpideyNet.Game;
 internal readonly record struct TileRaster
 {
     private const int Rows = MoverRules.TileSize;
+    private const int WebColour = 3;
     internal int Planes => 4;
     internal int RowBytes => MoverRules.Columns;
     internal int PlaneBytes => MoverPlan.TileBytes * Rows;
@@ -60,7 +61,10 @@ internal readonly record struct TileRaster
                 {
                     var index = plane * PlaneBytes + y * RowBytes + x / 8;
                     var mask = 0x80 >> (x & 7);
-                    buffer[index] |= (byte)mask;
+                    // Backing planes run high bit first. Palette 3 is white; 15 is yellow.
+                    // Replace the pixel colour, including clearing bits on coloured scenery.
+                    buffer[index] = (byte)((buffer[index] & ~mask)
+                        | ((WebColour & (1 << (Planes - 1 - plane))) != 0 ? mask : 0));
                 }
             }
 

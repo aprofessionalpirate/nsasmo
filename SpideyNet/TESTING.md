@@ -1,3 +1,21 @@
+# Relay player logging checks - 23 October 2026
+
+Accepted WebSocket connections now log at Information level with name, player ID,
+socket IP/port, anonymous room ID, player count and game modes. Disconnect logs
+include the same identity, remaining count, duration, last game room/coordinates
+and an ending reason. Room keys and query strings are excluded.
+
+A live two-client test verified exactly one connect/disconnect pair per accepted
+player, stable IDs, shared anonymous room correlation, native frame details,
+normal closure and malformed JSON (`JsonException`). A secret embedded in both
+the room key and malformed payload did not appear in relay output. The full
+existing domain and real-socket suite passed against the updated relay, including
+three-player interactions and shared-state checks; snapshot rate was 30.4/sec.
+
+The updated framework-dependent single-file relay was published to `outputs`.
+
+---
+
 # Three-player feature checks - 19 October 2026
 
 Three production session workers, three distinct disposable DOSBox 0.74-3 games,

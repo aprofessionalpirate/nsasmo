@@ -38,17 +38,32 @@ internal static class FeatureChecks
             "Native web geometry and held state survive the protocol");
         Check(!NetRules.Valid(source with { Web = new WebState(short.MaxValue, 0, 0, 0) }), "Reject unbounded web geometry");
 
-        // A web fills the visible VGA row while leaving adjacent rows untouched.
+        // A white web replaces yellow scenery across the clipped row; adjacent rows stay intact.
         {
             var raster = TileRaster.For(VideoMode.Vga);
             var buffer = new byte[raster.BufferBytes];
-            raster.PaintWeb(new WebState(270, 10, -20, 10), buffer);
-            for (var plane = 0; plane < raster.Planes; plane++)
+            foreach (var background in new byte[] { 0, 0xFF })
             {
-                var row = plane * raster.PlaneBytes + 10 * raster.RowBytes;
-                Check(buffer.AsSpan(row, raster.RowBytes).ToArray().All(value => value == 0xFF), "VGA web clips to the full visible row");
-                Check(buffer[row - 1] == 0 && buffer[row + raster.RowBytes] == 0, "VGA web leaves adjacent rows intact");
+                Array.Fill(buffer, background);
+                raster.PaintWeb(new WebState(270, 10, -20, 10), buffer);
+                for (var plane = 0; plane < raster.Planes; plane++)
+                {
+                    var row = plane * raster.PlaneBytes + 10 * raster.RowBytes;
+                    var expected = plane < 2 ? (byte)0 : (byte)0xFF;
+                    Check(buffer.AsSpan(row, raster.RowBytes).ToArray().All(value => value == expected),
+                        "VGA web clips to the full visible row using native white palette index 3");
+                    Check(buffer[row - 1] == background && buffer[row + raster.RowBytes] == background,
+                        "VGA web leaves adjacent rows intact");
+                }
             }
+
+            // A single web pixel must also preserve every neighbouring pixel in its byte.
+            Array.Fill(buffer, (byte)0xFF);
+            raster.PaintWeb(new WebState(3, 10, 3, 10), buffer);
+            var expectedBuffer = Enumerable.Repeat((byte)0xFF, raster.BufferBytes).ToArray();
+            expectedBuffer[10 * raster.RowBytes] = 0xEF;
+            expectedBuffer[raster.PlaneBytes + 10 * raster.RowBytes] = 0xEF;
+            Check(buffer.SequenceEqual(expectedBuffer), "White web clears only its pixel's high-plane bits");
         }
 
         CheckInterpolation(source);

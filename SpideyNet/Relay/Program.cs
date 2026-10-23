@@ -74,7 +74,12 @@ app.Map(NetRules.SocketPath, async context =>
         or OperationCanceledException or JsonException)
     {
         // Exception types explain failures without including request URLs or payload contents.
-        disconnectReason = context.RequestAborted.IsCancellationRequested ? "Request cancelled" : error.GetType().Name;
+        disconnectReason = error switch
+        {
+            OperationCanceledException when app.Lifetime.ApplicationStopping.IsCancellationRequested => "Server shutting down",
+            OperationCanceledException => "Request cancelled",
+            _ => error.GetType().Name
+        };
     }
     finally
     {

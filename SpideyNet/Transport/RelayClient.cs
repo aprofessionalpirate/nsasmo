@@ -20,9 +20,9 @@ public sealed class RelayClient
     public async Task Run(Uri endpoint, string room, string name, InteractionMode interactions, CancellationToken token,
         SharedMode shared = SharedMode.Independent)
     {
-        if (endpoint.Scheme != "wss" && !(endpoint.Scheme == "ws" && endpoint.IsLoopback))
+        if (!RelayEndpointPolicy.Allows(endpoint))
         {
-            throw new ArgumentException("Use wss:// for remote relays; ws:// is local only.");
+            throw new ArgumentException("Use wss:// for public relays; ws:// supports loopback and private LAN IP addresses.");
         }
         if (room.Length is < NetRules.MinRoomLength or > NetRules.MaxRoomLength)
         {

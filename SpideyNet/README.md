@@ -38,6 +38,30 @@ Remote actors use their own sprite frames and this process's graphics assets.
 Independent standing/walking animations and ceiling poses were verified in two
 VGA games. Space-fired web lines are shared with other players in the same screen.
 
+## Play on a local network
+
+On the relay computer, bind to its LAN address instead of localhost:
+
+```powershell
+.\Relay.exe --urls http://192.168.178.45:5000
+```
+
+Use `ws://192.168.178.45:5000` in every client. The address shown is an example;
+substitute the relay computer's actual address. Plain `ws://` is allowed for
+loopback, private IPv4 literals (10/8, 172.16/12, 192.168/16) and IPv6 unique-local
+address literals. Use it only on a trusted LAN: room keys and traffic are unencrypted.
+LAN hostnames and public addresses require `wss://`.
+
+Open `http://192.168.178.45:5000/health` from a player computer to verify reachability;
+it should return `{"protocol":5}`. If it times out, check the relay's listening
+address, Windows Firewall inbound TCP port 5000 on the Private profile, and network
+isolation between devices. With no endpoint configuration, the relay listens only
+on `http://localhost:5000`, which another computer cannot reach.
+
+`wss://` requires an HTTPS listener and a trusted certificate valid for the server
+address. An HTTP listener cannot become HTTPS by changing the client's URL.
+For a TLS relay, use `https://` for its health endpoint and `wss://` in the client.
+
 ## Internet play
 
 Run Relay on a publicly reachable host behind HTTPS with WebSocket
@@ -49,6 +73,13 @@ Room keys are bearer secrets. The client generates a 96-bit random key.
 Share it privately. Avoid logging `/play` query strings at the reverse proxy.
 Use a dedicated relay for trusted players; this is not an account or
 competitive anti-cheat system. Deploy one relay instance: rooms live in memory.
+
+The relay logs accepted player connections and disconnections at Information
+level. Entries include player name/ID, socket IP/port, an independent room ID
+and player count. Connections also show interaction/shared-world modes;
+disconnects show duration, last game room/position and an ending reason. Room
+keys and request query strings are not included. Behind a reverse proxy, the
+logged socket address is the proxy's address.
 
 Network updates target 30 Hz; local input, sampling and rendering target 60 Hz.
 Interpolation buffers two network updates (about 67 ms). Thirty updates/sec halves

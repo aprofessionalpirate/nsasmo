@@ -67,6 +67,7 @@ Check(() => !InteractionRules.WebHits(guest, guest with { Level = 3 }), "Web can
 SharedChecks.Run();
 VideoChecks.Run();
 FeatureChecks.Run();
+RelayEndpointChecks.Run();
 if (args.Length == 2 && args[0] == "--relay")
 {
     await IntegrationChecks.RunAsync(new Uri(args[1]));

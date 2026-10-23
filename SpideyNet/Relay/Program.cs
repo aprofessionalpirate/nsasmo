@@ -55,17 +55,40 @@ app.Map(NetRules.SocketPath, async context =>
         return;
     }
 
+    long? connectedAt = null;
+    var disconnectReason = "Connection closed";
     try
     {
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
+        connectedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        // Use an independent room ID to correlate players without logging the bearer key.
+        app.Logger.LogInformation(
+            "Player connected: {PlayerName} ({PlayerId}); address {RemoteAddress}:{RemotePort}; room {RoomId}; players {PlayerCount}; interactions {Interactions}; shared world {SharedMode}",
+            peer.Name, peer.Id, context.Connection.RemoteIpAddress, context.Connection.RemotePort,
+            room.Id, room.Count, interactions, sharedMode);
+
         await room.Run(socket, peer, context.RequestAborted);
     }
     catch (Exception error) when (error is IOException or InvalidDataException or System.Net.WebSockets.WebSocketException
         or OperationCanceledException or JsonException)
     {
-        app.Logger.LogDebug("Player connection ended: {Reason}", error.Message);
+        // Exception types explain failures without including request URLs or payload contents.
+        disconnectReason = context.RequestAborted.IsCancellationRequested ? "Request cancelled" : error.GetType().Name;
     }
-    finally { room.Leave(peer); }
+    finally
+    {
+        room.Leave(peer);
+        if (connectedAt is { } started)
+        {
+            var last = peer.State;
+            app.Logger.LogInformation(
+                "Player disconnected: {PlayerName} ({PlayerId}); address {RemoteAddress}:{RemotePort}; room {RoomId}; players remaining {PlayerCount}; duration {DurationSeconds:F1}s; last game room {GameLevel}; position {X},{Y}; reason {Reason}",
+                peer.Name, peer.Id, context.Connection.RemoteIpAddress, context.Connection.RemotePort,
+                room.Id, room.Count, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds,
+                last?.Frame.Level, last?.Frame.X, last?.Frame.Y, disconnectReason);
+        }
+    }
 });
 using var shutdown = new CancellationTokenSource();
 var broadcast = Task.Run(async () =>

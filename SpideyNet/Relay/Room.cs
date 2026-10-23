@@ -10,6 +10,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
     private readonly Dictionary<Guid, Peer> peers = [];
     private long tick;
     private readonly SharedRooms shared = new();
+    internal Guid Id { get; } = Guid.NewGuid();
     internal InteractionMode Interactions { get; } = interactions;
     internal SharedMode SharedMode { get; } = sharedMode;
 

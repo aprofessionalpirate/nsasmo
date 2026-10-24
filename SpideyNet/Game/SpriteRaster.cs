@@ -23,7 +23,7 @@ internal static class SpriteRaster
         // Match draw_actor's 24x21 source, mirrored origin and screen-edge clipping.
         var mirrored = (frame.Facing & 2) != 0;
         var originX = frame.X - (mirrored ? 3 : 0);
-        var originY = (int)frame.Y;
+        var originY = frame.ScreenY;
         for (var row = 0; row < Height; row++)
         {
             var y = originY + row;

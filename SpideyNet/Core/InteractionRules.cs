@@ -9,7 +9,10 @@ public static class InteractionRules
 
     public static bool WebHits(GameFrame source, GameFrame target)
     {
-        if (source.Level != target.Level || Math.Abs(source.Y - target.Y) > WebHeight) { return false; }
+        if (source.Level != target.Level || Math.Abs(source.ScreenY - target.ScreenY) > WebHeight)
+        {
+            return false;
+        }
         var delta = target.X - source.X;
         return source.Facing switch
         {

@@ -29,7 +29,7 @@ public sealed class RemoteTrack
         var first = samples.Peek();
         var last = samples.Count > 1 ? samples.ElementAt(1) : first;
         if (last.Time <= first.Time || Math.Abs(last.Frame.X - first.Frame.X) > SnapDistance
-            || Math.Abs(last.Frame.Y - first.Frame.Y) > SnapDistance)
+            || Math.Abs(last.Frame.ScreenY - first.Frame.ScreenY) > SnapDistance)
         {
             return last.Frame;
         }
@@ -38,7 +38,7 @@ public sealed class RemoteTrack
         return last.Frame with
         {
             X = (short)Math.Round(first.Frame.X + (last.Frame.X - first.Frame.X) * amount),
-            Y = (byte)Math.Round(first.Frame.Y + (last.Frame.Y - first.Frame.Y) * amount),
+            Y = unchecked((byte)(int)Math.Round(first.Frame.ScreenY + (last.Frame.ScreenY - first.Frame.ScreenY) * amount)),
             Web = WebRules.Interpolate(first.Frame.Web, last.Frame.Web, amount)
         };
     }

@@ -20,6 +20,6 @@ internal sealed partial class PlayerViewModel(Guid id) : ObservableObject
     {
         Name = player.Name;
         Room = RoomNames.Get(player.Frame.Level);
-        Position = $"{player.Frame.X}, {player.Frame.Y}";
+        Position = $"{player.Frame.X}, {player.Frame.ScreenY}";
     }
 }

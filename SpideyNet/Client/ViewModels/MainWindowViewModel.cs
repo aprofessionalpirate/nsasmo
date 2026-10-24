@@ -262,7 +262,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         var view = service.View;
         Status = view.Status;
         var locationText = view.Local is null ? view.Room
-            : $"{view.Room} · X {view.Local.X}, Y {view.Local.Y}";
+            : $"{view.Room} · X {view.Local.X}, Y {view.Local.ScreenY}";
         if (!string.IsNullOrEmpty(view.Shared))
         {
             locationText += $" · {view.Shared}";

@@ -37,6 +37,9 @@ internal static class IntegrationChecks
             first.Publish(source with { Level = 3 }, colour: SuitColour.Green);
             await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
                 && player.Frame.Level == 3 && player.Colour == SuitColour.Green) == true, stop.Token);
+            first.Publish(source with { Y = 250, Facing = 1, Pose = 18 }, colour: SuitColour.Blue);
+            await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
+                && player.Frame.ScreenY == -6 && player.Colour == SuitColour.Blue) == true, stop.Token);
             const byte CeilingFacing = 4;
             first.Publish(source with { Pose = CrouchingPose, Facing = CeilingFacing });
             await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self

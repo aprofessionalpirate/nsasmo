@@ -69,6 +69,7 @@ try
     SharedChecks.Run();
     VideoChecks.Run();
     SpriteChecks.Run();
+    PlayerEdgeChecks.Run();
     PlacementChecks.Run();
     FeatureChecks.Run();
     RelayEndpointChecks.Run();

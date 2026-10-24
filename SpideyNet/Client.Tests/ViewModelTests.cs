@@ -101,6 +101,24 @@ public sealed class ViewModelTests
     }
 
     [AvaloniaFact]
+    public async Task WrappedTopEdgePositionsRemainInTheirRoomAsync()
+    {
+        var service = new FakeClientService();
+        var model = new MainWindowViewModel(service, new FakeClipboardService());
+        await model.RefreshGamesCommand.ExecuteAsync(null);
+        model.ConnectCommand.Execute(null);
+        var frame = new GameFrame(2, 75, 250, 1, 18);
+        service.View = new SessionView("Connected", "Foyer", frame,
+            [new PlayerState(Guid.NewGuid(), "Clipped player", frame, 1)]);
+        await model.RefreshAsync();
+        Assert.Contains("Foyer", model.Location);
+        Assert.Contains("Y -6", model.Location);
+        Assert.Equal("75, -6", Assert.Single(model.Players).Position);
+        Assert.True(model.IsAttached);
+        await model.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
     public async Task ShutdownAwaitsDisconnectCleanupAsync()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

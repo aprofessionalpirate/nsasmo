@@ -26,6 +26,12 @@ internal static class ProbeRunner
             return;
         }
 
+        if (args.Length == 2 && args[0] == "--edge-sprites")
+        {
+            await EdgeSpriteProbe.RunAsync(int.Parse(args[1]));
+            return;
+        }
+
         if (args.Length == 2 && args[0] == "--animated-sprites")
         {
             await AnimatedSpriteProbe.RunAsync(int.Parse(args[1]));

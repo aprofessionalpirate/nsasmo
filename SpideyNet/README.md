@@ -114,6 +114,22 @@ image updates; matching clients must use the same protocol version.
 
 ## Play on a local network
 
+Double-click [Run-Server-LAN.bat](../Run-Server-LAN.bat) at the repository root.
+It publishes the Release relay to `outputs`, detects your private IPv4 address,
+and prints the `ws://` connection URL for players. If several LAN connections
+are available, choose the one your players use. Keep the console open while
+hosting; it shows player logs. Press Ctrl+C to stop. The window waits for a key
+when the script exits, including on build/startup failure.
+
+You can also choose the address and port explicitly:
+
+```powershell
+.\Run-Server-LAN.bat -Address 192.168.178.45 -Port 5000
+```
+
+The launcher requires the .NET 10 SDK, binds only to the selected address and
+does not change Windows Firewall rules. It works from any current directory.
+
 On the relay computer, bind to its LAN address instead of localhost:
 
 ```powershell

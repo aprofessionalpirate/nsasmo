@@ -344,3 +344,14 @@ An initial invalid-coordinate test fixture threw an uncaught exception and opene
 a Tests.exe application-error dialog. The fixture now uses protocol-valid bounds.
 The test executable also catches failures, reports the exception to stderr and
 returns exit code 1 instead of invoking Windows crash reporting.
+
+## LAN relay launcher (24 October 2026)
+
+Run-Server-LAN.bat published and hosted the relay from a different working
+folder. Automatic discovery selected the private Ethernet address instead of
+the Hyper-V adapter. A health request returned protocol 6 and a real WebSocket
+connection succeeded on the LAN listener. Explicit address/port selection also
+passed with built-in Windows PowerShell. Invalid loopback addresses and port 0
+returned nonzero exit codes before publishing. Ctrl+C stopped both test relays.
+Cross-device firewall reachability still depends on the host's Private-profile
+inbound rule; the launcher does not change firewall settings.

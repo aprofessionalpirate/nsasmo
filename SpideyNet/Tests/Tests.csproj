@@ -6,6 +6,7 @@
     <Compile Include="../Transport/RelayEndpointPolicy.cs" Link="RelayEndpointPolicy.cs" />
     <Compile Include="../Game/VideoMode.cs" Link="VideoMode.cs" />
     <Compile Include="../Game/TileRaster.cs" Link="TileRaster.cs" />
+    <Compile Include="../Game/SpriteRaster.cs" Link="SpriteRaster.cs" />
     <Compile Include="../Game/GameProfile.cs" Link="GameProfile.cs" />
     <Compile Include="../Game/EnemyRecord.cs" Link="EnemyRecord.cs" />
     <ProjectReference Include="../Core/Core.csproj" />

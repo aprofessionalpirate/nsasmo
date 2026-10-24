@@ -9,6 +9,8 @@ internal sealed class FakeClientService : IClientService
     internal ClientConnection? Connection { get; private set; }
     internal int Disconnects { get; private set; }
     internal int Shots { get; private set; }
+    internal Guid? TeleportedPlayer { get; private set; }
+    internal Guid? WatchedPlayer { get; private set; }
     internal TaskCompletionSource? DisconnectGate { get; set; }
 
     public Task<GameProcess[]> FindGamesAsync(CancellationToken token) => Task.FromResult(new[]
@@ -32,6 +34,14 @@ internal sealed class FakeClientService : IClientService
 
         View = new SessionView("Disconnected", "", null, []);
     }
+
+    public Task TeleportAsync(Guid player)
+    {
+        TeleportedPlayer = player;
+        return Task.CompletedTask;
+    }
+
+    public void Watch(Guid? player) => WatchedPlayer = player;
 
     public void FireWeb() => Shots++;
 }

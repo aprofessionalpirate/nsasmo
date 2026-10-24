@@ -14,6 +14,70 @@ namespace SpideyNet.Client.Tests;
 public sealed class WindowTests
 {
     [AvaloniaFact]
+    public async Task ColourChoiceUsesCompiledBindingAndReachesSessionOptionsAsync()
+    {
+        var service = new FakeClientService();
+        var model = new MainWindowViewModel(service, new FakeClipboardService());
+        var window = new MainWindow { DataContext = model };
+        window.Show();
+        await model.RefreshGamesCommand.ExecuteAsync(null);
+        var choice = window.GetVisualDescendants().OfType<CheckBox>().Single();
+        Assert.False(model.DifferentColours);
+        choice.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(model.DifferentColours);
+        model.ConnectCommand.Execute(null);
+        Assert.True(service.Connection?.DifferentColours);
+        Assert.False(choice.IsEffectivelyEnabled);
+        await model.ShutdownAsync();
+        model.Rendering = SpideyNet.Game.InjectionMode.Observe;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(choice.IsEffectivelyEnabled);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task PlayerSelectionEnablesBoundActionsAndDisplaysPreviewAsync()
+    {
+        var service = new FakeClientService();
+        var model = new MainWindowViewModel(service, new FakeClipboardService());
+        var window = new MainWindow { DataContext = model };
+        window.Show();
+        await model.RefreshGamesCommand.ExecuteAsync(null);
+        model.ConnectCommand.Execute(null);
+        var player = new SpideyNet.Core.PlayerState(Guid.NewGuid(), "Guest",
+            new SpideyNet.Core.GameFrame(17, 90, 147, 0, 24), 1);
+        service.View = service.View with { Players = [player] };
+        await model.RefreshAsync();
+        Dispatcher.UIThread.RunJobs();
+        var roster = window.GetVisualDescendants().OfType<ListBox>().Single();
+        roster.SelectedIndex = 0;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(player.Id, model.SelectedPlayer?.Id);
+        var spy = window.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, "Spy"));
+        Assert.True(spy.IsEffectivelyEnabled);
+        spy.Command!.Execute(null);
+        Assert.Equal(player.Id, service.WatchedPlayer);
+
+        using var data = new MemoryStream();
+        using (var encoder = new System.IO.Compression.DeflateStream(data, System.IO.Compression.CompressionLevel.Fastest, true))
+        {
+            encoder.Write(new byte[SpideyNet.Core.ScreenFrame.RawBytes]);
+        }
+
+        service.View = service.View with { Screen = new SpideyNet.Core.PlayerScreen(player.Id,
+            new SpideyNet.Core.ScreenFrame(1, data.ToArray())) };
+        await model.RefreshAsync();
+        Dispatcher.UIThread.RunJobs();
+        Assert.NotNull(model.Preview);
+        Assert.Same(model.Preview, window.GetVisualDescendants().OfType<Image>().Single().Source);
+        model.StopSpyingCommand.Execute(null);
+        Assert.Null(model.Preview);
+        await model.ShutdownAsync();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task ClosingWaitsForSessionRestorationAsync()
     {
         var gate = new TaskCompletionSource();

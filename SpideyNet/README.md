@@ -38,6 +38,37 @@ Remote actors use their own sprite frames and this process's graphics assets.
 Independent standing/walking animations and ceiling poses were verified in two
 VGA games. Space-fired web lines are shared with other players in the same screen.
 
+## Find, join and watch players
+
+The player list shows native room names. Select a player, then choose
+**Teleport to player** to load their room and move to the position reported
+when you clicked. This requires Experimental rendering. Wait until the target
+is fully inside their room and release your current web before teleporting.
+The native game loads the destination; shared enemies and puzzles resume there.
+
+Choose **Spy** to see that player's actual DOSBox screen and movements in the
+client, including players in other rooms. Your own character stays in place.
+**Stop spying** ends the stream. Spying also works with Observe rendering.
+Keep the watched DOSBox window restored; minimized windows have no preview.
+Only the DOSBox client area is captured, without changing focus.
+
+Previews use 320 x 200 pixels, RGB565 and compression, at up to four images/sec.
+Capture starts only while watched. A shared capture serves multiple watchers;
+the relay routes each image only to its subscribers. Position updates remain
+at 30/sec. All clients and the relay must use protocol 6 for these features.
+
+## Optional player colours
+
+Before connecting, enable **Different player colours** with Experimental rendering.
+Other players receive seven distinct suit colours on your screen. Your own player
+keeps the native red suit; eyes, outlines, blue clothing and white webs are preserved.
+The setting is local, defaults off and does not require matching relay settings.
+Disconnect to change it. Observe mode does not draw coloured sprites.
+
+Colours follow the remote-player roster order, so joining or leaving can reassign
+them. Coloured guests are composited into the background and native actors draw
+over them when they overlap. No shared palette or sprite assets are modified.
+
 ## Host the relay with Docker
 
 Install Docker Desktop and use Linux containers. From the repository root:
@@ -47,7 +78,7 @@ docker compose -f SpideyNet/compose.yaml up -d --build
 Invoke-RestMethod http://127.0.0.1:5080/health
 ```
 
-The health response reports protocol 5. Use `ws://127.0.0.1:5080` in the client.
+The health response reports protocol 6. Use `ws://127.0.0.1:5080` in the client.
 Only the relay runs in Docker; DOSBox and the desktop client remain on Windows.
 The server needs no host .NET installation. The client still needs its runtime.
 
@@ -96,7 +127,7 @@ address literals. Use it only on a trusted LAN: room keys and traffic are unencr
 LAN hostnames and public addresses require `wss://`.
 
 Open `http://192.168.178.45:5000/health` from a player computer to verify reachability;
-it should return `{"protocol":5}`. If it times out, check the relay's listening
+it should return `{"protocol":6}`. If it times out, check the relay's listening
 address, Windows Firewall inbound TCP port 5000 on the Private profile, and network
 isolation between devices. With no endpoint configuration, the relay listens only
 on `http://localhost:5000`, which another computer cannot reach.
@@ -162,7 +193,7 @@ remain independent.
 
 Choose `Experimental` under **Enemies/puzzles** on every client. This requires
 experimental rendering. Choose `Independent` for the previous behavior or Observe.
-Client and relay must both use protocol version 5; replace older published builds.
+Client and relay must both use protocol version 6; replace older published builds.
 
 The first active player in each game room owns enemy movement. Other players
 receive position, facing, animation, health and death updates. Hits from any player reduce
@@ -263,6 +294,10 @@ dotnet run --project Probe --no-build -- --session-reentry ws://localhost:5080 <
 dotnet run --project Probe --no-build -- --web <process-id>
 # Repeated pull/render/release checks; disconnect that game's client first:
 dotnet run --project Probe --no-build -- --web-stress <process-id>
+# Seven animated guest colours, native fallback and exact graphics restoration:
+dotnet run --project Probe --no-build -- --colours <process-id>
+# Seven socket peers and native coloured-room transitions; disposable game only:
+dotnet run --project Probe --no-build -- --colours-session ws://localhost:5080 <process-id>
 # Isolated thread-lifetime regression; no game needed:
 dotnet run --project Probe --no-build -- --pause-race
 # Stabilize already defeated actors and check native wrapping after detach:

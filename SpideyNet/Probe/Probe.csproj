@@ -5,6 +5,7 @@
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Client/TeleportRequest.cs" Link="TeleportRequest.cs" />
     <Compile Include="../Client/Session.cs" Link="Session.cs" />
     <Compile Include="../Client/SessionView.cs" Link="SessionView.cs" />
     <Compile Include="../Client/SessionDiagnostics.cs" Link="SessionDiagnostics.cs" />

@@ -11,6 +11,8 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
     private const int SolidPointer = 0x98D6;
     private const int BackPointer = 0x98DA;
     private const int BackTiles = 0x235D;
+    private const int SpritePointer = 0x98DE;
+    private const int SpriteBankFrames = 0x60;
     private const int RealModeLimit = 0x100000;
     private const byte CharacterMask = 0x3F;
 
@@ -57,17 +59,36 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
         return Convert.ToHexString(SHA256.HashData(memory.Read(buffer, raster.BufferBytes)));
     }
 
-    internal IReadOnlyList<PixelPatch> PlanWebs(IReadOnlyList<WebState> webs)
+    internal IReadOnlyList<PixelPatch> PlanOverlay(IReadOnlyList<WebState> webs, IReadOnlyList<GameFrame>? guests, byte level)
     {
-        if (webs.Count == 0)
+        if (webs.Count == 0 && (guests is null || guests.Count == 0))
         {
             return [];
         }
 
         var raster = TileRaster.For((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]);
-        var address = Far(BufferPointer, Ram(), raster.BufferBytes);
+        var ram = Ram();
+        var address = Far(BufferPointer, ram, raster.BufferBytes);
         var before = memory.Read(address, raster.BufferBytes);
         var after = before.ToArray();
+        if (guests is not null)
+        {
+            // Read native assets only. Alternate facing uses the game's pre-transposed bank.
+            var sprites = Far(SpritePointer, ram, (SpriteBankFrames + GameLayout.PlayerCharacterLimit) * SpriteRaster.FrameBytes);
+            for (var index = 0; index < guests.Count; index++)
+            {
+                var guest = guests[index];
+                if (guest.Level != level)
+                {
+                    continue;
+                }
+
+                var frame = guest.Pose + ((guest.Facing & 1) != 0 ? SpriteBankFrames : 0);
+                var pixels = memory.Read(sprites + frame * SpriteRaster.FrameBytes, SpriteRaster.FrameBytes);
+                SpriteRaster.Paint(guest, index, pixels, after);
+            }
+        }
+
         foreach (var web in webs)
         {
             raster.PaintWeb(web, after);

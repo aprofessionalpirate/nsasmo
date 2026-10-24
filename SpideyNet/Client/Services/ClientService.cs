@@ -42,10 +42,14 @@ internal sealed class ClientService : IClientService
         }
 
         session.Connect(connection.ProcessId, endpoint, room, name,
-            connection.Rendering, connection.Interactions, connection.Shared);
+            connection.Rendering, connection.Interactions, connection.Shared, connection.DifferentColours);
     }
 
     public Task DisconnectAsync() => session.DisconnectAsync();
+
+    public Task TeleportAsync(Guid player) => session.TeleportAsync(player);
+
+    public void Watch(Guid? player) => session.Watch(player);
 
     public void FireWeb() => session.FireWeb();
 }

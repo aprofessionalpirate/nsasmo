@@ -92,6 +92,7 @@ public sealed class ViewModelTests
         await model.RefreshAsync();
         Assert.Same(row, Assert.Single(model.Players));
         Assert.Equal("110, 100", row.Position);
+        Assert.Equal("Lift", row.Room);
         Assert.Contains("Enemy owner: you", model.Location);
         Assert.Equal(0, locationChanges);
         service.View = service.View with { Players = [] };
@@ -115,6 +116,49 @@ public sealed class ViewModelTests
         await Task.WhenAll(disconnect, shutdown);
         Assert.Equal(1, service.Disconnects);
         Assert.False(model.IsAttached);
+    }
+
+    [AvaloniaFact]
+    public async Task PlayerActionsUseStableSelectionAndStopWatchingDepartedPlayersAsync()
+    {
+        var service = new FakeClientService();
+        var model = new MainWindowViewModel(service, new FakeClipboardService());
+        await model.RefreshGamesCommand.ExecuteAsync(null);
+        model.ConnectCommand.Execute(null);
+        var player = new PlayerState(Guid.NewGuid(), "Guest", new GameFrame(17, 90, 147, 0, 24), 1);
+        service.View = new SessionView("Connected", "Midnight", null, [player]);
+        await model.RefreshAsync();
+        Assert.False(model.TeleportCommand.CanExecute(null));
+        model.SelectedPlayer = Assert.Single(model.Players);
+        Assert.Equal("Mummy's Revenge", model.SelectedPlayer.Room);
+        Assert.True(model.TeleportCommand.CanExecute(null));
+        await model.TeleportCommand.ExecuteAsync(null);
+        Assert.Equal(player.Id, service.TeleportedPlayer);
+        model.SpyCommand.Execute(null);
+        Assert.Equal(player.Id, service.WatchedPlayer);
+        Assert.True(model.IsSpying);
+
+        service.View = service.View with { Players = [] };
+        await model.RefreshAsync();
+        Assert.Null(model.SelectedPlayer);
+        Assert.Null(service.WatchedPlayer);
+        Assert.False(model.IsSpying);
+        Assert.False(model.TeleportCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task ObserveModeAllowsSpyingButPreventsTeleportAsync()
+    {
+        var service = new FakeClientService();
+        var model = new MainWindowViewModel(service, new FakeClipboardService()) { Rendering = InjectionMode.Observe };
+        await model.RefreshGamesCommand.ExecuteAsync(null);
+        model.ConnectCommand.Execute(null);
+        service.View = service.View with { Players = [new PlayerState(Guid.NewGuid(), "Guest", new GameFrame(2, 80, 147, 0, 24), 1)] };
+        await model.RefreshAsync();
+        model.SelectedPlayer = Assert.Single(model.Players);
+        Assert.False(model.TeleportCommand.CanExecute(null));
+        Assert.True(model.SpyCommand.CanExecute(null));
+        await model.ShutdownAsync();
     }
 
     [Fact]

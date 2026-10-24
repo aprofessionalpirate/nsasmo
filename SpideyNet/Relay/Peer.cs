@@ -14,6 +14,10 @@ internal sealed class Peer(string name)
     internal long FrozenUntil { get; set; }
     internal long WebReadyAt { get; set; }
     internal Guid? WebTarget { get; set; }
+    internal Guid? Watching { get; set; }
+    internal ScreenFrame? Screen { get; set; }
+    internal long ScreenAt { get; set; }
+    internal ScreenFrame? SentScreen { get; set; }
     internal long SharedEpoch { get; set; } = -1;
     internal long SharedSerial { get; set; }
     internal Channel<WorldState> Outbox { get; } = Channel.CreateBounded<WorldState>(

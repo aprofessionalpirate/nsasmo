@@ -14,6 +14,8 @@ public sealed class GameBridge : IDisposable
     private byte[]? savedCode;
     private readonly ProcessMemory memory;
     private readonly GameInput input;
+    private readonly int processId;
+
     private long playerAddress;
     private long roomHeaderAddress;
     private byte[]? savedSlots;
@@ -25,9 +27,12 @@ public sealed class GameBridge : IDisposable
     private const int RoomSettleMs = 100;
     private byte observedLevel;
     private long roomChangedAt;
+    private RoomTravel? travel;
+    private long travelStartedAt;
 
     public GameBridge(int processId, CancellationToken token)
     {
+        this.processId = processId;
         memory = new ProcessMemory(processId);
         input = new GameInput(processId);
         try
@@ -37,6 +42,57 @@ public sealed class GameBridge : IDisposable
             roomChangedAt = Environment.TickCount64 - RoomSettleMs;
         }
         catch { memory.Dispose(); throw; }
+    }
+
+    public Task<ScreenFrame?> CaptureScreenAsync() => Task.Run(() => GameScreenCapture.Capture(processId));
+
+    public bool TryTeleport(GameFrame destination)
+    {
+        if (!NetRules.Valid(destination) || destination.X is < 0 or > 235 || destination.Y > 155)
+        {
+            throw new InvalidOperationException("Wait until the player is fully inside their room before teleporting.");
+        }
+
+        using var pause = memory.Pause();
+        travel ??= new RoomTravel(memory, playerAddress - GameProfile.PlayerDataOffset);
+        var local = Read();
+        if (travelStartedAt == 0 && local is not null && (local.WebHeld || local.Web is not null))
+        {
+            throw new InvalidOperationException("Release Space and let the current web shot finish before teleporting.");
+        }
+
+        if (local?.Level == destination.Level && travel.Ready)
+        {
+            travel.Restore();
+            travel.Place(destination);
+            travelStartedAt = 0;
+            return true;
+        }
+
+        if (travelStartedAt == 0 && local is not null)
+        {
+            // Finish ownership of the old scene before asking the game to load another one.
+            Restore();
+            ResumeEnemies();
+            sceneMemory?.Reset();
+            travel.Request(destination.Level);
+            travelStartedAt = Environment.TickCount64;
+        }
+        else if (travelStartedAt != 0 && Environment.TickCount64 - travelStartedAt > 5000)
+        {
+            travel.Restore();
+            travelStartedAt = 0;
+            throw new IOException("The game did not finish loading the destination room.");
+        }
+
+        return false;
+    }
+
+    public void CancelTeleport()
+    {
+        using var pause = memory.Pause();
+        travel?.Restore();
+        travelStartedAt = 0;
     }
 
     public GameFrame? Read()
@@ -101,6 +157,8 @@ public sealed class GameBridge : IDisposable
             ResumeEnemies();
             return;
         }
+        // Remove transient guest pixels before rebuilding moving scenery underneath them.
+        webMemory?.TryRestore();
         sceneMemory ??= new SceneMemory(memory, playerAddress - GameProfile.PlayerDataOffset, playerAddress);
         if (!sceneMemory.TryApply(state, ReadCount(), local, localPlayer, sampledPuzzles))
         {
@@ -161,7 +219,7 @@ public sealed class GameBridge : IDisposable
         }
     }
 
-    public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode)
+    public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode, bool differentColours = false)
     {
         if (mode == InjectionMode.Observe)
         {
@@ -214,7 +272,13 @@ public sealed class GameBridge : IDisposable
         for (var index = 0; index < EnemyPlan.MaxGuests; index++)
         {
             var remote = index < guests.Count && guests[index].Level == local.Level ? guests[index] : null;
-            EnemyPlan.Build(player, remote, Descriptor(index)).CopyTo(batch, index * EnemyPlan.Stride);
+            var actor = EnemyPlan.Build(player, remote, Descriptor(index));
+            if (differentColours)
+            {
+                // The backing-buffer compositor draws coloured guests; avoid a second native sprite.
+                actor[GameLayout.CharacterOffset] = GameLayout.HiddenCharacter;
+            }
+            actor.CopyTo(batch, index * EnemyPlan.Stride);
         }
 
         // Extend drawing only; physics and scripts keep their original actor count.
@@ -233,13 +297,15 @@ public sealed class GameBridge : IDisposable
         memory.Write(SlotAddress(), batch);
         foreach (var patch in gapPatches) { memory.Write(patch.Address, patch.After); }
         if (!instruction.AsSpan().SequenceEqual(patchCode)) { memory.Write(RenderAddress(), patchCode); }
-        webMemory!.Update(guests.Where(guest => guest.Level == local.Level).Select(guest => guest.Web).OfType<WebState>().ToArray(), local.Level);
+        webMemory!.Update(guests.Where(guest => guest.Level == local.Level).Select(guest => guest.Web).OfType<WebState>().ToArray(),
+            local.Level, differentColours ? guests : null);
     }
 
     public void Dispose()
     {
         try
         {
+            CancelTeleport();
             Restore();
             webMemory?.Restore();
         }

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Security.Cryptography;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SpideyNet.Client.Services;
@@ -25,6 +26,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
+    [NotifyCanExecuteChangedFor(nameof(TeleportCommand))]
     private InjectionMode rendering = InjectionMode.Experimental;
 
     [ObservableProperty]
@@ -35,15 +37,20 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     private SharedMode shared = SharedMode.Experimental;
 
     [ObservableProperty]
+    private bool differentColours;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
-    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(DisconnectCommand), nameof(RefreshGamesCommand), nameof(FireWebCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(DisconnectCommand), nameof(RefreshGamesCommand),
+        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand))]
     private bool isAttached;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
-    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(RefreshGamesCommand), nameof(DisconnectCommand), nameof(FireWebCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(RefreshGamesCommand), nameof(DisconnectCommand),
+        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand))]
     private bool isBusy;
 
     [ObservableProperty]
@@ -56,6 +63,24 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     [NotifyPropertyChangedFor(nameof(HasError))]
     private string errorMessage = "";
 
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TeleportCommand), nameof(SpyCommand))]
+    private PlayerViewModel? selectedPlayer;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StopSpyingCommand))]
+    [NotifyPropertyChangedFor(nameof(IsSpying))]
+    private Guid? watchedPlayer;
+
+    [ObservableProperty]
+    private Bitmap? preview;
+
+    [ObservableProperty]
+    private string previewStatus = "Select a player and choose Spy to view their game.";
+
+    private PlayerScreen? displayedScreen;
+    public bool IsSpying => WatchedPlayer is not null;
+
     public ObservableCollection<GameProcess> Games { get; } = [];
     public ObservableCollection<PlayerViewModel> Players { get; } = [];
     public IReadOnlyList<InjectionMode> RenderingModes { get; } = Enum.GetValues<InjectionMode>();
@@ -65,6 +90,61 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     public bool CanConfigureWorld => CanEdit && Rendering == InjectionMode.Experimental;
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     public bool HasPlayers => Players.Count != 0;
+
+    private bool CanTarget() => IsAttached && !IsBusy && SelectedPlayer is not null;
+    private bool CanTeleport() => CanTarget() && Rendering == InjectionMode.Experimental;
+    private bool CanStopSpying() => IsAttached && WatchedPlayer is not null;
+
+    [RelayCommand(CanExecute = nameof(CanTeleport))]
+    private async Task TeleportAsync()
+    {
+        var target = SelectedPlayer;
+        if (target is null)
+        {
+            return;
+        }
+
+        ErrorMessage = "";
+        IsBusy = true;
+        try
+        {
+            await service.TeleportAsync(target.Id);
+        }
+        catch (Exception error)
+        {
+            ErrorMessage = $"Cannot teleport: {error.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanTarget))]
+    private void Spy()
+    {
+        ClearPreview();
+        WatchedPlayer = SelectedPlayer?.Id;
+        service.Watch(WatchedPlayer);
+        PreviewStatus = $"Watching {SelectedPlayer?.Name} · waiting for game screen";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanStopSpying))]
+    private void StopSpying()
+    {
+        service.Watch(null);
+        WatchedPlayer = null;
+        ClearPreview();
+        PreviewStatus = "Select a player and choose Spy to view their game.";
+    }
+
+    private void ClearPreview()
+    {
+        var previous = Preview;
+        Preview = null;
+        previous?.Dispose();
+        displayedScreen = null;
+    }
 
     private bool CanConnect() => CanEdit && SelectedGame is not null;
     private bool CanDisconnect() => IsAttached && !IsBusy;
@@ -117,7 +197,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         try
         {
             var game = SelectedGame ?? throw new InvalidOperationException("Launch DOSBox, then refresh.");
-            service.Connect(new ClientConnection(game.Id, Endpoint, RoomKey, PlayerName, Rendering, Interactions, Shared));
+            service.Connect(new ClientConnection(game.Id, Endpoint, RoomKey, PlayerName, Rendering, Interactions, Shared, DifferentColours));
             IsAttached = true;
             Status = "Connecting to relay";
         }
@@ -134,6 +214,8 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         try
         {
             await service.DisconnectAsync();
+            StopSpying();
+            SelectedPlayer = null;
             IsAttached = false;
             Players.Clear();
             OnPropertyChanged(nameof(HasPlayers));
@@ -200,6 +282,45 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
             }
 
             row.Update(player);
+        }
+
+        if (SelectedPlayer is not null && !Players.Contains(SelectedPlayer))
+        {
+            SelectedPlayer = null;
+        }
+
+        if (WatchedPlayer is { } watched)
+        {
+            var target = view.Players.FirstOrDefault(player => player.Id == watched);
+            if (target is null)
+            {
+                StopSpying();
+                PreviewStatus = "The watched player disconnected.";
+            }
+            else if (view.Screen is { } screen && screen.Player == watched)
+            {
+                if (!ReferenceEquals(screen, displayedScreen))
+                {
+                    try
+                    {
+                        var image = PreviewImageFactory.Create(screen.Frame);
+                        ClearPreview();
+                        Preview = image;
+                        displayedScreen = screen;
+                        PreviewStatus = $"{target.Name} · {RoomNames.Get(target.Frame.Level)} · live preview (4 fps)";
+                    }
+                    catch (Exception error) when (error is IOException or ArgumentException)
+                    {
+                        ClearPreview();
+                        PreviewStatus = "The player's game screen is unavailable.";
+                    }
+                }
+            }
+            else
+            {
+                ClearPreview();
+                PreviewStatus = $"{target.Name} · waiting for game screen (keep DOSBox restored)";
+            }
         }
 
         OnPropertyChanged(nameof(HasPlayers));

@@ -280,3 +280,67 @@ The complete domain and two-/three-player socket suites also passed.
 
 This is a native-code replay and memory-driver regression, not yet confirmation
 of the corrected behavior in a new recording from the two human players.
+
+## Player room tools and spectator previews (24 October 2026)
+
+Thirteen Avalonia headless tests pass, including named room rows, retained
+selection, teleport/spy command routing, Observe-mode teleport restrictions,
+preview bindings, malformed image rejection, disconnect cleanup and removing
+a watched player. The complete domain and socket suites pass at approximately
+30 movement snapshots/sec. New socket checks cover large image frames, capture
+subscriptions, different game rooms, stale image expiry, changing targets,
+stopping, room-key isolation and teleporting out of an existing freeze.
+
+The production GameBridge travel/capture probe passed Lift, Mummy's Revenge,
+Cardboard City, Black Thunder, Midnight and Foyer with native room loading,
+requested coordinates and nonblank game images. The production Session probe
+passed cross-room and same-room teleports, successive real DOSBox images through
+the relay, stopping previews and disconnecting while a room load was pending.
+
+TaskKit desktop verification used two separate VGA DOSBox games. The Avalonia
+client displayed a remote player as Lift rather than 3. Selecting its row enabled
+the new buttons. Spy displayed that player's full screen, HUD and movement at
+four images/sec while the viewing game remained in Midnight. Teleport to player
+moved the viewing game into Lift and rendered both players there. Stop spying
+removed the image; Disconnect restored the UI and native renderer. No Foyer
+fixture was left running unattended.
+
+The first capture replay exposed DPI cropping, now fixed by matching physical
+capture coordinates. Captures in the verified rooms compressed to about 8-20 KB.
+The first travel attempt exposed the per-frame clearing of the native load flag;
+the temporary verified instruction patch and loader acknowledgement fix it.
+Sprite recolouring was added in the follow-up below without modifying the shared
+VGA palette or sprite assets.
+
+Additional native diagnostic commands (run against isolated test games):
+
+```powershell
+dotnet run --project Probe -- --travel 1234 "$env:TEMP\spideynet-preview.rgb565"
+dotnet run --project Probe -- --player-tools ws://localhost:5080 1234
+```
+
+## Optional guest sprite colours (24 October 2026)
+
+The full Release build passes with zero warnings. All fourteen Avalonia headless
+checks pass, including the new checkbox binding, default-off setting, connection
+option and disabled configuration while attached or observing. Raster checks
+cover all seven suit/shade pairs, eight facing values, transparent and opaque
+pixels, unchanged eyes/clothing/outlines, and clipping at the screen edges.
+
+The live VGA Midnight probe displayed seven differently coloured animated guests
+alongside the unchanged local player and native enemy, with a white remote web.
+A suspended transaction verified exact background restoration when switching to
+native rendering, then exact reserved bytes, renderer instruction and actor count
+on disconnect. Animation and both flip axes were exercised during the display.
+These are synthetic guests; human multiplayer overlap/latency testing remains useful.
+
+An eight-player socket session (one native game plus seven simulated peers) also
+passed coloured rendering after native travel through Lift, Mummy's Revenge,
+Cardboard City and Midnight, followed by disconnect and native renderer/count
+restoration. The complete relay suite passed at 30.1 snapshots/sec. A deliberate
+invalid relay URI confirmed Tests.exe returns exit code 1 with stderr output.
+
+An initial invalid-coordinate test fixture threw an uncaught exception and opened
+a Tests.exe application-error dialog. The fixture now uses protocol-valid bounds.
+The test executable also catches failures, reports the exception to stderr and
+returns exit code 1 instead of invoking Windows crash reporting.

@@ -2,14 +2,14 @@ namespace SpideyNet.Core;
 
 public static class NetRules
 {
-    public const int Version = 5;
+    public const int Version = 6;
     public const int MaxPlayers = 8;
     public const int TickRate = 30;
     public const int LocalTickRate = 60;
     public const double TickMs = RateWindowMs / (double)TickRate;
     public static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(TickMs);
     public static readonly TimeSpan LocalTickInterval = TimeSpan.FromSeconds(1d / LocalTickRate);
-    public const int MaxMessageBytes = 8192;
+    public const int MaxMessageBytes = 256 * 1024;
     public const int MaxNameLength = 24;
     public const int MinRoomLength = 12;
     public const int MaxRoomLength = 64;

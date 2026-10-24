@@ -46,11 +46,11 @@ internal sealed class WebMemory(ProcessMemory memory, long dataAddress, long lev
         memory.Write(dataAddress + CoordinatesOffset, bytes);
     }
 
-    internal void Update(IReadOnlyList<WebState> webs, byte level)
+    internal void Update(IReadOnlyList<WebState> webs, byte level, IReadOnlyList<GameFrame>? colouredGuests = null)
     {
         TryRestore();
         ownedLevel = level;
-        patches = pixels.PlanWebs(webs);
+        patches = pixels.PlanOverlay(webs, colouredGuests, level);
         foreach (var patch in patches)
         {
             memory.Write(patch.Address, patch.After);

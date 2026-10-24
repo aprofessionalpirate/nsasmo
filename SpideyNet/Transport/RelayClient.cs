@@ -9,13 +9,36 @@ public sealed class RelayClient
     private ClientUpdate? latest;
     private long receivedAt;
     private int pendingAction;
+    private PlayerScreen? screen;
+    private ScreenFrame? pendingScreen;
+    private WatchRequest? watching;
+    private long screenReceivedAt;
+
+    public PlayerScreen? Screen
+    {
+        get
+        {
+            var image = Volatile.Read(ref screen);
+            return image?.Player == Volatile.Read(ref watching)?.Player
+                && Environment.TickCount64 - Interlocked.Read(ref screenReceivedAt) < NetRules.StaleMs ? image : null;
+        }
+    }
+
+    public void Watch(Guid? player)
+    {
+        Volatile.Write(ref watching, player is { } id ? new WatchRequest(id) : null);
+        Volatile.Write(ref screen, null);
+    }
+
+    public void PublishScreen(ScreenFrame image) => Volatile.Write(ref pendingScreen, image);
 
     public WorldState? World => Environment.TickCount64 - Interlocked.Read(ref receivedAt) < NetRules.StaleMs
         ? Volatile.Read(ref world) : null;
 
     public void Publish(GameFrame? frame, SharedReport? shared = null) => Volatile.Write(ref latest,
         frame is null ? null : new ClientUpdate(NetRules.Version, 0, frame, Shared: shared));
-    public void FireWeb() => Interlocked.Exchange(ref pendingAction, (int)PlayerAction.FireWeb);
+    public void FireWeb() => Interlocked.CompareExchange(ref pendingAction, (int)PlayerAction.FireWeb, (int)PlayerAction.Move);
+    public void Teleported() => Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Teleport);
 
     public async Task Run(Uri endpoint, string room, string name, InteractionMode interactions, CancellationToken token,
         SharedMode shared = SharedMode.Independent)
@@ -61,6 +84,9 @@ public sealed class RelayClient
             try { await Task.WhenAll(send, receive); }
             catch (Exception) when (lifetime.IsCancellationRequested) { }
             Volatile.Write(ref world, null);
+            Volatile.Write(ref screen, null);
+            Volatile.Write(ref pendingScreen, null);
+            Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Move);
         }
     }
 
@@ -80,7 +106,8 @@ public sealed class RelayClient
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(TimeSpan.FromSeconds(NetRules.SendTimeoutSeconds));
             var action = (PlayerAction)Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Move);
-            await Wire.Send(socket, frame with { Sequence = ++sequence, Action = action }, deadline.Token);
+            await Wire.Send(socket, frame with { Sequence = ++sequence, Action = action,
+                Watching = Volatile.Read(ref watching)?.Player, Screen = Interlocked.Exchange(ref pendingScreen, null) }, deadline.Token);
         }
     }
 
@@ -103,6 +130,20 @@ public sealed class RelayClient
                     || !Enum.IsDefined(p.Constraint) || !NetRules.Valid(p.Frame)))
             {
                 throw new InvalidDataException("Invalid relay snapshot.");
+            }
+
+            if (state.Screen is { } preview)
+            {
+                if (preview.Player == Guid.Empty || preview.Frame is null || !preview.Frame.IsValid)
+                {
+                    throw new InvalidDataException("Invalid player preview.");
+                }
+
+                if (preview.Player == Volatile.Read(ref watching)?.Player)
+                {
+                    Volatile.Write(ref screen, preview);
+                    Interlocked.Exchange(ref screenReceivedAt, Environment.TickCount64);
+                }
             }
 
             Interlocked.Exchange(ref receivedAt, Environment.TickCount64);

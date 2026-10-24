@@ -62,8 +62,14 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                 && now - p.LastSeen < NetRules.StaleMs).Select(p => p.State!).ToArray();
             foreach (var peer in peers.Values)
             {
+                // Route fresh game images only to watchers; movement snapshots stay at 30 Hz.
+                var watched = peers.GetValueOrDefault(peer.Watching ?? Guid.Empty);
+                var screen = watched?.Screen is { } image && now - watched.ScreenAt < NetRules.StaleMs
+                    && !ReferenceEquals(peer.SentScreen, image) ? new PlayerScreen(watched.Id, image) : null;
+                peer.SentScreen = watched?.Screen;
+                var requested = peers.Values.Any(other => other.Watching == peer.Id && now - other.LastSeen < NetRules.StaleMs);
                 peer.Outbox.Writer.TryWrite(new WorldState(NetRules.Version, peer.Id, tick, players,
-                    SharedMode == SharedMode.Experimental ? shared.Snapshot(peer.State?.Frame.Level, peer.SharedSerial) : null));
+                    SharedMode == SharedMode.Experimental ? shared.Snapshot(peer.State?.Frame.Level, peer.SharedSerial) : null, requested, screen));
             }
         }
     }
@@ -93,6 +99,28 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                     throw new InvalidDataException("Invalid or excessive update.");
                 }
 
+                if (update.Watching == peer.Id || update.Watching == Guid.Empty || update.Screen is { IsValid: false })
+                {
+                    throw new InvalidDataException("Invalid player preview request.");
+                }
+
+                if (peer.Watching != update.Watching)
+                {
+                    peer.SentScreen = null;
+                }
+
+                peer.Watching = update.Watching;
+                if (update.Screen is { } screen)
+                {
+                    if (now - peer.ScreenAt < 100)
+                    {
+                        throw new InvalidDataException("Excessive player preview rate.");
+                    }
+
+                    peer.Screen = screen;
+                    peer.ScreenAt = now;
+                }
+
                 Apply(peer, update, now);
                 peer.LastSeen = now;
                 if (update.Shared is not null)
@@ -115,7 +143,14 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
         var frame = update.Frame;
         var constraint = ConstraintKind.None;
         var previous = peer.State?.Frame;
-        if (Interactions == InteractionMode.Experimental && previous is not null)
+        if (update.Action == PlayerAction.Teleport)
+        {
+            // A deliberate relocation must not be rewound by an earlier freeze or tether.
+            peer.FrozenUntil = 0;
+            peer.WebTarget = null;
+        }
+
+        if (Interactions == InteractionMode.Experimental && previous is not null && update.Action != PlayerAction.Teleport)
         {
             if (previous.Level != frame.Level) { peer.FrozenUntil = 0; }
             if (peer.FrozenUntil > now)
@@ -124,7 +159,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                 constraint = ConstraintKind.Frozen;
             }
         }
-        if (Interactions == InteractionMode.Experimental && constraint != ConstraintKind.Frozen)
+        if (Interactions == InteractionMode.Experimental && constraint != ConstraintKind.Frozen && update.Action != PlayerAction.Teleport)
         {
             frame = ApplyWeb(peer, frame, now);
             if (peer.WebTarget is not null)

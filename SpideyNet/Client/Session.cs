@@ -13,17 +13,39 @@ internal sealed class Session
     private Task? running;
     private Task? stopping;
     private SessionView view = new("Disconnected", "", null, []);
+    private TeleportRequest? teleport;
+    private bool canTeleport;
     private string networkStatus = "Connecting";
+
+    internal Task TeleportAsync(Guid player)
+    {
+        if (running is null || !canTeleport)
+        {
+            throw new InvalidOperationException("Connect with Experimental rendering before teleporting.");
+        }
+
+        var request = new TeleportRequest(player);
+        if (Interlocked.CompareExchange(ref teleport, request, null) is not null)
+        {
+            throw new InvalidOperationException("A teleport is already in progress.");
+        }
+
+        return request.Completion.Task;
+    }
+
+    internal void Watch(Guid? player) => relay.Watch(player);
 
     internal SessionView View => Volatile.Read(ref view);
 
     internal void Connect(int processId, Uri endpoint, string room, string name, InjectionMode mode, InteractionMode interactions,
-        SharedMode shared)
+        SharedMode shared, bool differentColours = false)
     {
         if (running is not null) { throw new InvalidOperationException("Disconnect first."); }
+        canTeleport = mode == InjectionMode.Experimental;
+        relay.Watch(null);
         stopping = null;
         lifetime = new CancellationTokenSource();
-        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, lifetime.Token);
+        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, differentColours, lifetime.Token);
     }
 
     internal void FireWeb() => relay.FireWeb();
@@ -40,6 +62,20 @@ internal sealed class Session
         if (cancellation is null)
         {
             return;
+        }
+
+        // Let an accepted native room load finish before restoring its temporary patch.
+        // Cancellation halfway through would leave the room index ahead of its tables.
+        canTeleport = false;
+        if (Volatile.Read(ref teleport) is { } request)
+        {
+            try
+            {
+                await request.Completion.Task.WaitAsync(TimeSpan.FromSeconds(8));
+            }
+            catch (Exception error) when (error is IOException or InvalidOperationException or OperationCanceledException or TimeoutException)
+            {
+            }
         }
 
         cancellation.Cancel();
@@ -60,7 +96,7 @@ internal sealed class Session
     }
 
     private async Task RunAsync(int processId, Uri endpoint, string room, string name,
-        InjectionMode mode, InteractionMode interactions, SharedMode shared, CancellationToken token)
+        InjectionMode mode, InteractionMode interactions, SharedMode shared, bool differentColours, CancellationToken token)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
         var network = NetworkLoopAsync(endpoint, room, name, interactions, shared, linked.Token);
@@ -74,6 +110,9 @@ internal sealed class Session
                 var tracks = new Dictionary<Guid, RemoteTrack>();
                 var sceneTrack = new SharedTrack();
                 WorldState? lastState = null;
+                Task<ScreenFrame?>? capture = null;
+                long capturedAt = 0;
+                long travelledAt = 0;
                 while (await timer.WaitForNextTickAsync(linked.Token))
                 {
                     var local = game.Read();
@@ -82,6 +121,62 @@ internal sealed class Session
                         relay.FireWeb();
                     }
                     var state = relay.World;
+                    if (Volatile.Read(ref teleport) is { } request)
+                    {
+                        try
+                        {
+                            request.Destination ??= state?.Players.FirstOrDefault(player => player.Id == request.Player)?.Frame
+                                ?? throw new InvalidOperationException("The selected player is no longer connected.");
+                            if (Environment.TickCount64 - request.CreatedAt > 7000)
+                            {
+                                throw new IOException("Teleport timed out while the game was loading.");
+                            }
+
+                            if (game.TryTeleport(request.Destination))
+                            {
+                                tracks.Clear();
+                                lastState = null;
+                                sceneTrack = new SharedTrack();
+                                travelledAt = Environment.TickCount64;
+                                relay.Teleported();
+                                Interlocked.CompareExchange(ref teleport, null, request);
+                                request.Completion.TrySetResult();
+                            }
+                        }
+                        catch (Exception error)
+                        {
+                            game.CancelTeleport();
+                            Interlocked.CompareExchange(ref teleport, null, request);
+                            request.Completion.TrySetException(error);
+                        }
+
+                        local = game.Read();
+                    }
+
+                    // Image capture runs independently so a slow window cannot stall game updates.
+                    if (capture is { IsCompleted: true })
+                    {
+                        try
+                        {
+                            if (await capture is { } image && state?.ScreenRequested == true)
+                            {
+                                relay.PublishScreen(image);
+                            }
+                        }
+                        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+                        {
+                            // An exiting/minimized game simply has no preview available.
+                        }
+
+                        capture = null;
+                    }
+
+                    if (state?.ScreenRequested == true && capture is null && Environment.TickCount64 - capturedAt >= 250)
+                    {
+                        capturedAt = Environment.TickCount64;
+                        capture = game.CaptureScreenAsync();
+                    }
+
                     if (shared == SharedMode.Experimental)
                     {
                         var scene = game.ReadScene();
@@ -99,7 +194,8 @@ internal sealed class Session
                         }
                     }
                     else { relay.Publish(local); }
-                    if (interactions == InteractionMode.Experimental && mode == InjectionMode.Experimental)
+                    if (interactions == InteractionMode.Experimental && mode == InjectionMode.Experimental
+                        && Volatile.Read(ref teleport) is null && Environment.TickCount64 - travelledAt > 500)
                     {
                         game.Constrain(state?.Players.FirstOrDefault(p => p.Id == state.Self));
                     }
@@ -124,12 +220,12 @@ internal sealed class Session
                     foreach (var id in tracks.Keys.Where(id => !players.Any(p => p.Id == id)).ToArray()) { tracks.Remove(id); }
                     var frames = players.Select(p => tracks[p.Id].Sample(Environment.TickCount64))
                         .OfType<GameFrame>().ToArray();
-                    game.Render(frames, mode);
+                    game.Render(frames, mode, differentColours);
                     var owner = state?.Shared?.Room?.Owner;
                     var sharedStatus = shared == SharedMode.Independent ? "" : owner is null ? "Waiting for shared scene"
                         : owner == state!.Self ? "Enemy owner: you" : $"Enemy owner: {state.Players.FirstOrDefault(p => p.Id == owner)?.Name ?? "waiting"}";
                     Volatile.Write(ref view, new SessionView(Volatile.Read(ref networkStatus),
-                        local is null ? "Menu or transition" : game.Title, local, players, sharedStatus));
+                        local is null ? "Menu or transition" : game.Title, local, players, sharedStatus, relay.Screen));
                 }
             }, linked.Token);
         }
@@ -141,6 +237,8 @@ internal sealed class Session
         }
         finally
         {
+            Interlocked.Exchange(ref teleport, null)?.Completion.TrySetCanceled();
+            relay.Watch(null);
             relay.Publish(null);
             linked.Cancel();
             try { await network; }

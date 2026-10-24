@@ -19,7 +19,7 @@ internal sealed partial class PlayerViewModel(Guid id) : ObservableObject
     internal void Update(PlayerState player)
     {
         Name = player.Name;
-        Room = player.Frame.Level.ToString();
+        Room = RoomNames.Get(player.Frame.Level);
         Position = $"{player.Frame.X}, {player.Frame.Y}";
     }
 }

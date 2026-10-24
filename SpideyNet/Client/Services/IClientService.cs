@@ -9,4 +9,6 @@ internal interface IClientService
     void Connect(ClientConnection connection);
     Task DisconnectAsync();
     void FireWeb();
+    Task TeleportAsync(Guid player);
+    void Watch(Guid? player);
 }

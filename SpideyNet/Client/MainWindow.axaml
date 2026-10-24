@@ -6,18 +6,18 @@
         x:ClassModifier="internal"
         x:DataType="vm:MainWindowViewModel"
         Title="SpideyNet · DOS multiplayer"
-        Width="1080" Height="700" MinWidth="900" MinHeight="540"
+        Width="1220" Height="820" MinWidth="1000" MinHeight="540"
         WindowStartupLocation="CenterScreen"
         Background="#131822">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="2.5*,*" RowSpacing="14" ColumnSpacing="20">
+    <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="1.15*,*" RowSpacing="14" ColumnSpacing="20">
       <StackPanel Grid.ColumnSpan="2" Spacing="4">
         <TextBlock Text="SPIDEYNET" FontSize="30" FontWeight="Bold" />
         <TextBlock Text="VGA · DOS multiplayer" Foreground="#A8B6CA" />
       </StackPanel>
 
       <Border Grid.Row="1" Background="#1D2533" CornerRadius="10" Padding="20">
-        <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+        <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
               ColumnSpacing="14" RowSpacing="10">
           <TextBlock Text="Relay address" VerticalAlignment="Center" />
           <TextBox Grid.Column="1" Text="{Binding Endpoint}" IsEnabled="{Binding CanEdit}"
@@ -46,6 +46,9 @@
           <TextBlock Grid.Row="6" Text="Enemies / puzzles" VerticalAlignment="Center" />
           <ComboBox Grid.Row="6" Grid.Column="1" ItemsSource="{Binding SharedModes}" SelectedItem="{Binding Shared}"
                     IsEnabled="{Binding CanConfigureWorld}" HorizontalAlignment="Stretch" AutomationProperties.Name="Enemies and puzzles" />
+          <CheckBox Grid.Row="7" Grid.ColumnSpan="2" Content="Different player colours"
+                    IsChecked="{Binding DifferentColours}" IsEnabled="{Binding CanConfigureWorld}"
+                    AutomationProperties.Name="Different player colours" />
         </Grid>
       </Border>
 
@@ -69,27 +72,37 @@
       </StackPanel>
 
       <Border Grid.Row="1" Grid.Column="1" Grid.RowSpan="4" Background="#1D2533" CornerRadius="10" Padding="16" MinHeight="180">
-        <Grid RowDefinitions="Auto,*" RowSpacing="12">
-          <Grid ColumnDefinitions="2*,*,*">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="12">
+          <Grid ColumnDefinitions="2*,2*,*">
             <TextBlock Text="PLAYER" FontWeight="SemiBold" Foreground="#A8B6CA" />
             <TextBlock Grid.Column="1" Text="ROOM" FontWeight="SemiBold" Foreground="#A8B6CA" />
             <TextBlock Grid.Column="2" Text="POSITION" FontWeight="SemiBold" Foreground="#A8B6CA" />
           </Grid>
           <TextBlock Grid.Row="1" Text="Other players appear here when they join your room."
                      IsVisible="{Binding !HasPlayers}" TextWrapping="Wrap" Foreground="#A8B6CA" />
-          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasPlayers}">
-            <ItemsControl ItemsSource="{Binding Players}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:PlayerViewModel">
-                  <Grid ColumnDefinitions="2*,*,*" Margin="0,7">
-                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1" Text="{Binding Room}" />
-                    <TextBlock Grid.Column="2" Text="{Binding Position}" />
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
+          <ListBox Grid.Row="1" ItemsSource="{Binding Players}" SelectedItem="{Binding SelectedPlayer}"
+                   IsVisible="{Binding HasPlayers}" MaxHeight="220"
+                   AutomationProperties.Name="Other players">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:PlayerViewModel">
+                <Grid ColumnDefinitions="2*,2*,*" ColumnSpacing="8" Margin="0,7">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding Room}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="2" Text="{Binding Position}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <WrapPanel Grid.Row="2">
+            <Button Content="Teleport to player" Command="{Binding TeleportCommand}" Margin="0,0,8,8" />
+            <Button Content="Spy" Command="{Binding SpyCommand}" Margin="0,0,8,8" />
+            <Button Content="Stop spying" Command="{Binding StopSpyingCommand}" Margin="0,0,0,8" />
+          </WrapPanel>
+          <TextBlock Grid.Row="3" Text="{Binding PreviewStatus}" TextWrapping="Wrap" Foreground="#A8B6CA" />
+          <Border Grid.Row="4" IsVisible="{Binding IsSpying}" Background="Black" CornerRadius="4" Padding="4">
+            <Image Source="{Binding Preview}" Height="250" Stretch="Uniform"
+                   RenderOptions.BitmapInterpolationMode="None" AutomationProperties.Name="Player game preview" />
+          </Border>
         </Grid>
       </Border>
     </Grid>

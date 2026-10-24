@@ -160,3 +160,46 @@ the hidden frame, while retaining native pointers. This avoids native wrapping
 and lets the renderer reject the off-screen sprite. Apply this when replicating
 death, not just while drawing guests, so it remains safe after disconnect.
 The `--inactive` diagnostic checks raw actor state after all patches are released.
+
+# Native room travel
+
+CS:`0x107C` stores the destination in DS:`0x007F`, then sets DS:`0x1D0E`.
+The main loop consumes that request at CS:`0x045B`, saves outgoing enemy state
+through CS:`0x1FA4`, and enters the native loader at CS:`0x02C2`.
+CS:`0x2043` normally clears DS:`0x1D0E` before physics each frame. A host write
+alone can therefore change the room index without loading its tables.
+
+RoomTravel verifies the `A2 0E 1D` instruction at CS:`0x2043`, temporarily
+replaces it with three NOPs and submits the destination. The loader clears the
+request itself at CS:`0x032D`. Completion requires that acknowledgement, a valid
+matching room/title and the bridge's settling interval. The driver restores the
+instruction and translates current coordinates, bounds and previous coordinates
+together. It preserves native animation pointers and flags. A normal disconnect
+waits for an accepted travel request before cancelling the session.
+
+# Player screen previews
+
+A separate window-capture driver uses PrintWindow on the attached DOSBox client
+area and rescales to 320 x 200. Its thread temporarily uses per-monitor DPI
+awareness so physical capture pixels and client dimensions agree. Handles and
+DPI context are restored after every capture. This does not inspect another
+window or change foreground focus. RGB565 frames are Deflate-compressed;
+receivers bound decompression to exactly 128,000 bytes. Protocol 6 carries
+on-demand watch subscriptions and routes fresh images once per subscribed peer.
+
+# Optional guest sprite compositor
+
+The VGA sprite source is the process-local far pointer at DS:`0x98DE`.
+A frame occupies 256 bytes: four 63-byte planes (24 x 21 pixels) plus padding.
+Facing bit 0 selects the pre-transposed bank 96 frames later. Bits 1 and 2
+mirror horizontally and vertically. Horizontal mirroring moves the 24-pixel
+origin three units left, matching the native shifted scratch renderer.
+All-one colour 15 is transparent, not opaque yellow sprite content.
+
+SpriteRaster reads those assets and paints only visible pixels into the existing
+256 x 176 four-plane backing buffer. It remaps red 2 and dark red 6 to a per-guest
+suit/shade pair, retaining all other pixels. WebMemory owns one combined transient
+patch set for sprites and webs; webs draw last in native white. Scene corrections
+restore this layer before repainting moving scenery. Native guest sprites use
+the existing hidden frame while the option is enabled. No additional code hook,
+asset allocation, sprite pointer changes or global palette changes are needed.

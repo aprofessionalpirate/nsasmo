@@ -52,6 +52,7 @@ internal static class IntegrationChecks
             Check(() => first.World!.Players.Single(p => p.Id == first.World.Self).Constraint == ConstraintKind.None,
                 "Players pass through each other without position corrections");
             await NativeWebCheckAsync(first, second, source, stop.Token);
+            await TeleportCheckAsync(first, second, source, stop.Token);
             await FragmentCheckAsync(endpoint, stop.Token);
             await CapacityCheckAsync(endpoint, stop.Token);
             await RejectCheckAsync(endpoint, "{broken"u8.ToArray(), WebSocketMessageType.Text, stop.Token);
@@ -74,6 +75,22 @@ internal static class IntegrationChecks
             try { await Task.WhenAll(tasks); }
             catch (OperationCanceledException) { }
         }
+    }
+
+    private static async Task TeleportCheckAsync(RelayClient first, RelayClient second, GameFrame frame, CancellationToken token)
+    {
+        first.Publish(frame);
+        second.Publish(frame with { X = 80 });
+        await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self).Frame.X == 80, token);
+        first.FireWeb();
+        await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self).Constraint == ConstraintKind.Frozen, token);
+        second.Publish(frame with { X = 180 });
+        second.Teleported();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(500);
+        await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self)
+            is { Constraint: ConstraintKind.None, Frame.X: 180 }, deadline.Token);
+        Console.WriteLine("Teleport socket: relocation clears an existing freeze without waiting for expiry.");
     }
 
     private static async Task NativeWebCheckAsync(RelayClient first, RelayClient second, GameFrame source, CancellationToken token)

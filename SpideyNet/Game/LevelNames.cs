@@ -1,77 +1,8 @@
+using SpideyNet.Core;
+
 namespace SpideyNet.Game;
 
 internal static class LevelNames
 {
-    private static readonly Dictionary<byte, string> Names = new()
-    {
-        [0x00] = "",
-        [0x01] = "Midnight",
-        [0x02] = "Foyer",
-        [0x03] = "Lift",
-        [0x04] = "Lift",
-        [0x05] = "Shaft",
-        [0x06] = "Black Thunder",
-        [0x07] = "Take 1",
-        [0x08] = "Basement",
-        [0x09] = "Storage Room",
-        [0x0A] = "Way Out",
-        [0x0B] = "Wot! No Turtles?",
-        [0x0C] = "Into The Sewer",
-        [0x0D] = "The Great Drain Robbery",
-        [0x0E] = "The Great Drain Robbery",
-        [0x0F] = "TAKE 3",
-        [0x10] = "Bad Moon Rising",
-        [0x11] = "Mummy's Revenge",
-        [0x12] = "Very Grave Yard",
-        [0x13] = "Rat Trap",
-        [0x14] = "Under The Soil",
-        [0x15] = "Bad Moon Falling",
-        [0x16] = "Starry Starry Night",
-        [0x17] = "TAKE 2",
-        [0x18] = "Fantasy Soundstage",
-        [0x19] = "Cardboard City",
-        [0x1A] = "Paper Plates from Mars",
-        [0x1B] = "Space Ship",
-        [0x1C] = "The Lab",
-        [0x1D] = "Time Machine",
-        [0x1E] = "Timeless Void",
-        [0x1F] = "TAKE 6",
-        [0x20] = "Air-locked",
-        [0x21] = "Planet Fall",
-        [0x22] = "Mission Control",
-        [0x23] = "Weighting Room",
-        [0x24] = "Weighting Room",
-        [0x25] = "Weighting Room",
-        [0x26] = "Weighting Room",
-        [0x27] = "Weighting Room",
-        [0x28] = "Lion Low",
-        [0x29] = "Head Lion",
-        [0x2A] = "Leo's Maze",
-        [0x2B] = "Leo's Maze",
-        [0x2C] = "Leo's Maze",
-        [0x2D] = "Leo's Maze",
-        [0x2E] = "Roaring Flames",
-        [0x2F] = "TAKE 4",
-        [0x30] = "Cheers",
-        [0x31] = "Cactusville",
-        [0x32] = "Vulture Gulch",
-        [0x33] = "Mine!",
-        [0x34] = "Yours!",
-        [0x35] = "Behind Bars",
-        [0x36] = "Behind Bars",
-        [0x37] = "TAKE 5",
-        [0x38] = "All this and Jaws too",
-        [0x39] = "Castle Entrance",
-        [0x3A] = "Puzzle Room",
-        [0x3B] = "The Pits",
-        [0x3C] = "Torture Chamber",
-        [0x3D] = "Torture Chamber",
-        [0x3E] = "Video Code",
-        [0x3F] = "Mysterio's End?",
-    };
-
-    internal static bool Matches(byte level, string title)
-    {
-        return Names.TryGetValue(level, out var expected) && title == expected;
-    }
+    internal static bool Matches(byte level, string title) => level <= GameLayout.MaxLevel && title == RoomNames.Get(level);
 }

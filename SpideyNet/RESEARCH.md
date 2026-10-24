@@ -203,3 +203,28 @@ patch set for sprites and webs; webs draw last in native white. Scene correction
 restore this layer before repainting moving scenery. Native guest sprites use
 the existing hidden frame while the option is enabled. No additional code hook,
 asset allocation, sprite pointer changes or global palette changes are needed.
+
+# Shared colour rendering and preview scaling corrections
+
+Shared scene application previously restored the guest overlay, resumed DOSBox,
+and repainted it in a later Render call. The native background copier could run
+in the gap. Session now submits a GameSceneUpdate with its Render call so restore,
+scene application and repaint share one suspended transaction. Nested ThreadPause
+instances retain mutex recursion without suspending the same threads repeatedly.
+
+GDI's default BLACKONWHITE stretch mode ANDs removed pixels when shrinking.
+Alternating red/cyan pixels therefore became black at 2x, 3x and 4x. The capture
+driver now uses COLORONCOLOR and flushes GDI before reading the DIB bits directly.
+See [SetStretchBltMode](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-setstretchbltmode)
+and [DIB synchronization](https://devblogs.microsoft.com/oldnewthing/20100923-00/?p=12773).
+
+# Teleport collision origins
+
+CS:`0x0EDD` rebuilds collision bounds from actor +29/+30 and the eight-facing
+origin table at DS:`0xA9AD` (`07070700000700000700070700000007`). An odd X/Y
+origin entry adds `21 - width/height`; the inclusive right/bottom adds size minus
+one. Translating old bounds while changing facing leaves the box on the wrong
+side of the sprite. PlayerPlacement matches that routine, validates the native
+table, resets previous coordinates/facing, and preserves animation pointers,
+health and native animation flags. Session refreshes the destination position
+while loading rather than retaining only the first report.

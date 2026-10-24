@@ -83,11 +83,30 @@ internal static class PlayerToolsProbe
                 Console.WriteLine($"Session teleport: {RoomNames.Get(level)} at X={session.View.Local.X}, Y={session.View.Local.Y}.");
             }
 
+            // Change the target while its destination is loading; arrival must use the new report.
+            target.Publish(before with { Level = 3, X = 90, Y = 147, Facing = 0 });
+            await UntilAsync(() => session.View.Players.Any(player => player.Frame.Level == 3 && player.Frame.X == 90), stop.Token);
+            var movingTarget = session.TeleportAsync(target.World!.Self);
+            await UntilAsync(() => session.View.Local is null, stop.Token);
+            target.Publish(before with { Level = 3, X = 150, Y = 147, Facing = 2 });
+            await movingTarget.WaitAsync(stop.Token);
+            await UntilAsync(() => session.View.Local?.Level == 3 && session.View.Local.X == 150, stop.Token);
+            if (session.View.Local!.Facing != 2)
+            {
+                throw new IOException("Teleport did not match the target's mirrored facing.");
+            }
+            Console.WriteLine("Moving teleport target: refreshed X=150 and mirrored facing while the native room loaded.");
+
+            target.Publish(before with { X = 90, Y = 147 });
+            await UntilAsync(() => session.View.Players.Any(player => player.Frame.Level == before.Level), stop.Token);
+            await session.TeleportAsync(target.World!.Self).WaitAsync(stop.Token);
+            await UntilAsync(() => session.View.Local?.Level == before.Level, stop.Token);
+
             // A same-room move uses the same selected-player action without a loader request.
             target.Publish(before with { X = 150, Y = 147 });
             await UntilAsync(() => session.View.Players.Any(player => player.Frame.X == 150), stop.Token);
             await session.TeleportAsync(target.World!.Self).WaitAsync(stop.Token);
-            await UntilAsync(() => Math.Abs((session.View.Local?.X ?? 0) - 150) <= 8, stop.Token);
+            await UntilAsync(() => session.View.Local?.Level == before.Level && session.View.Local.X == 150, stop.Token);
             target.Watch(null);
             await Task.Delay(350, stop.Token);
             if (target.Screen is not null)
@@ -125,10 +144,16 @@ internal static class PlayerToolsProbe
         }
     }
 
-    private static async Task UntilAsync(Func<bool> ready, CancellationToken token)
+    private static async Task UntilAsync(Func<bool> ready, CancellationToken token,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(ready))] string? condition = null)
     {
+        var started = Environment.TickCount64;
         while (!ready())
         {
+            if (Environment.TickCount64 - started > 10000)
+            {
+                throw new TimeoutException($"Timed out waiting for {condition}.");
+            }
             await Task.Delay(10, token);
         }
     }

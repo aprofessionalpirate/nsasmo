@@ -130,7 +130,9 @@ public sealed class GameBridge : IDisposable
         }
 
         webMemory ??= new WebMemory(memory, playerAddress - GameProfile.PlayerDataOffset, CurrentRoomAddress());
-        return frame with { Web = webMemory.Read(data), WebHeld = (data[1] & 0x10) != 0 };
+        var sampled = frame with { Web = webMemory.Read(data), WebHeld = (data[1] & 0x10) != 0 };
+        // Suspension can catch the DOS routine between field writes; retry incomplete native state.
+        return NetRules.Valid(sampled) ? sampled : null;
     }
 
     public string Title => Encoding.ASCII.GetString(memory.Read(
@@ -219,7 +221,8 @@ public sealed class GameBridge : IDisposable
         }
     }
 
-    public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode, bool differentColours = false)
+    public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode, bool differentColours = false,
+        GameSceneUpdate? sceneUpdate = null)
     {
         if (mode == InjectionMode.Observe)
         {
@@ -228,9 +231,23 @@ public sealed class GameBridge : IDisposable
             return;
         }
         using var pause = memory.Pause();
+
         if (guests.Count > EnemyPlan.MaxGuests)
         {
             throw new InvalidDataException("Too many players for the reserved slots.");
+        }
+
+        // Restore transient pixels, apply scenery changes and repaint guests before DOSBox resumes.
+        // Otherwise its draw loop can sample the cleared background between these operations.
+        if (sceneUpdate?.State is { } state)
+        {
+            var enemyMode = state.Room is { } room && room.Owner != sceneUpdate.LocalPlayer
+                ? EnemyMode.Replica : EnemyMode.Native;
+            SyncScene(state, enemyMode, sceneUpdate.LocalPlayer, sceneUpdate.Puzzles);
+        }
+        else if (sceneUpdate?.ResumeEnemies == true)
+        {
+            ResumeEnemies();
         }
 
         var local = Read();

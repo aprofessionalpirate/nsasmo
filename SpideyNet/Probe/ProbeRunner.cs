@@ -8,6 +8,18 @@ internal static class ProbeRunner
 {
     internal static async Task RunAsync(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--screen-scale")
+        {
+            ScreenScaleProbe.Run();
+            return;
+        }
+
+        if (args.Length == 3 && args[0] == "--render-regression")
+        {
+            await RenderRegressionProbe.RunAsync(new Uri(args[1]), int.Parse(args[2]));
+            return;
+        }
+
         if (args.Length == 3 && args[0] == "--colours-session")
         {
             await SpriteProbe.SessionAsync(new Uri(args[1]), int.Parse(args[2]));
@@ -29,6 +41,12 @@ internal static class ProbeRunner
         if (args.Length == 3 && args[0] == "--player-tools")
         {
             await PlayerToolsProbe.RunAsync(new Uri(args[1]), int.Parse(args[2]));
+            return;
+        }
+
+        if (args.Length == 2 && args[0] == "--placement")
+        {
+            TravelProbe.CheckPlacement(int.Parse(args[1]));
             return;
         }
 

@@ -125,8 +125,14 @@ internal sealed class Session
                     {
                         try
                         {
-                            request.Destination ??= state?.Players.FirstOrDefault(player => player.Id == request.Player)?.Frame
+                            var target = state?.Players.FirstOrDefault(player => player.Id == request.Player)?.Frame
                                 ?? throw new InvalidOperationException("The selected player is no longer connected.");
+                            request.Destination ??= target;
+                            if (target.Level == request.Destination.Level)
+                            {
+                                // Refresh the landing point while the native room loader runs.
+                                request.Destination = target;
+                            }
                             if (Environment.TickCount64 - request.CreatedAt > 7000)
                             {
                                 throw new IOException("Teleport timed out while the game was loading.");
@@ -177,20 +183,19 @@ internal sealed class Session
                         capture = game.CaptureScreenAsync();
                     }
 
+                    GameSceneUpdate? sceneUpdate = null;
                     if (shared == SharedMode.Experimental)
                     {
                         var scene = game.ReadScene();
                         relay.Publish(scene?.Frame, scene is null ? null : sceneTrack.Capture(scene, state));
                         if (scene is not null && sceneTrack.Accept(scene, state) is { } correction)
                         {
-                            var enemyMode = correction.Room is { } roomState && roomState.Owner != state?.Self
-                                ? EnemyMode.Replica : EnemyMode.Native;
-                            game.SyncScene(correction, enemyMode, state?.Self, scene.Puzzles);
+                            sceneUpdate = new GameSceneUpdate(correction, state?.Self, scene.Puzzles);
                         }
                         else if (scene is null || state?.Shared?.Room is not { } activeRoom
                             || activeRoom.Level != scene.Frame.Level || activeRoom.Owner == state.Self)
                         {
-                            game.ResumeEnemies();
+                            sceneUpdate = new GameSceneUpdate(null, null, null, ResumeEnemies: true);
                         }
                     }
                     else { relay.Publish(local); }
@@ -220,7 +225,7 @@ internal sealed class Session
                     foreach (var id in tracks.Keys.Where(id => !players.Any(p => p.Id == id)).ToArray()) { tracks.Remove(id); }
                     var frames = players.Select(p => tracks[p.Id].Sample(Environment.TickCount64))
                         .OfType<GameFrame>().ToArray();
-                    game.Render(frames, mode, differentColours);
+                    game.Render(frames, mode, differentColours, sceneUpdate);
                     var owner = state?.Shared?.Room?.Owner;
                     var sharedStatus = shared == SharedMode.Independent ? "" : owner is null ? "Waiting for shared scene"
                         : owner == state!.Self ? "Enemy owner: you" : $"Enemy owner: {state.Players.FirstOrDefault(p => p.Id == owner)?.Name ?? "waiting"}";

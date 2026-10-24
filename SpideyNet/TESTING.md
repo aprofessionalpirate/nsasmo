@@ -355,3 +355,40 @@ passed with built-in Windows PowerShell. Invalid loopback addresses and port 0
 returned nonzero exit codes before publishing. Ctrl+C stopped both test relays.
 Cross-device firewall reachability still depends on the host's Private-profile
 inbound rule; the launcher does not change firewall settings.
+
+## Shared colour flicker, scaled previews and teleport precision
+
+A displayed-frame regression reproduced colour flicker with the previous
+production renderer: the static guest's suit pixel count ranged from 0 to 63
+across 100 captures while shared-world syncing was enabled. The combined
+scene/render transaction retained all 63 pixels in all 100 samples. Reserved
+actor storage and renderer bytes restored exactly after disconnect.
+
+A native GDI regression reproduced 64,000 black output pixels from alternating
+red/cyan input at each of 2x, 3x and 4x. The production scaler retains only source
+colours and completes drawing before direct DIB reads. Fourteen headless UI
+checks and the full socket suite passed; socket cadence was 30.1/sec. The pause
+race probe passed 3,000 transactions, nested ownership and competing-host-thread
+serialization with zero failures.
+
+Geometry checks cover all eight native collision origins, exact X/Y/facing,
+cleared displacement history and unchanged animation pointers/flags. Native
+placement matched every facing exactly before physics resumed. Production
+sessions repeatedly travelled through Mummy's Revenge, Lift, Cardboard City and
+Midnight, refreshed a moving target from X=90 to X=150 during loading, matched
+mirrored facing, and passed same-room travel and disconnect during loading.
+
+An extended run on an old reused fixture encountered a rejected update; clean
+fixtures and repeated travel passed. The native frame reader now defers samples
+outside protocol bounds rather than exporting them. An isolated, suspended
+player-record test verified invalid facing is deferred and restored native state
+is readable. This does not establish the cause of every possible long-session
+failure. Music investigation was set aside at the user's request.
+
+Additional isolated diagnostics:
+
+```powershell
+dotnet run --project Probe -- --screen-scale
+dotnet run --project Probe -- --render-regression ws://localhost:5080 <test-pid>
+dotnet run --project Probe -- --placement <test-pid>
+```

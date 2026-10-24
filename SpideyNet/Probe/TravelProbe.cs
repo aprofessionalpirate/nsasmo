@@ -46,6 +46,31 @@ internal static class TravelProbe
         }
     }
 
+    internal static void CheckPlacement(int processId)
+    {
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var game = new GameBridge(processId, stop.Token);
+        using var pause = new ThreadPause(processId);
+        var before = game.Read() ?? throw new IOException("Start an idle VGA game first.");
+        try
+        {
+            for (byte facing = 0; facing < 8; facing++)
+            {
+                var target = before with { X = 90, Y = 110, Facing = facing, Web = null, WebHeld = false };
+                if (!game.TryTeleport(target) || game.Read() is not { } placed
+                    || placed.X != target.X || placed.Y != target.Y || placed.Facing != target.Facing)
+                {
+                    throw new IOException("Native placement did not match exact target coordinates and facing.");
+                }
+            }
+        }
+        finally
+        {
+            game.TryTeleport(before);
+        }
+        Console.WriteLine("Native placement: all eight facing values land at exact target X/Y before physics resumes.");
+    }
+
     private static async Task TravelAsync(GameBridge game, GameFrame destination, CancellationToken token)
     {
         while (!game.TryTeleport(destination))

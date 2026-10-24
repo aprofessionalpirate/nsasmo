@@ -59,8 +59,7 @@ internal static class GameScreenCapture
             fullPrevious = SelectObject(full, fullBitmap);
             // Capture only this DOSBox client area, without foreground changes or desktop pixels.
             if (!PrintWindow(window, full, 3)
-                || !StretchBlt(target, 0, 0, ScreenFrame.Width, ScreenFrame.Height,
-                    full, 0, 0, rect.Right, rect.Bottom, 0x00CC0020))
+                || !GameScreenScale.Copy(full, target, rect.Right, rect.Bottom))
             {
                 return null;
             }
@@ -131,6 +130,4 @@ internal static class GameScreenCapture
     [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint value);
     [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteObject(nint value);
     [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteDC(nint dc);
-    [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool StretchBlt(nint target, int x, int y, int width, int height,
-        nint source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, uint operation);
 }

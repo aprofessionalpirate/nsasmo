@@ -42,7 +42,9 @@ VGA games. Space-fired web lines are shared with other players in the same scree
 
 The player list shows native room names. Select a player, then choose
 **Teleport to player** to load their room and move to the position reported
-when you clicked. This requires Experimental rendering. Wait until the target
+as you arrive, using the latest report in the destination room. Facing and
+collision origins match the target; normal game physics resumes immediately.
+This requires Experimental rendering. Wait until the target
 is fully inside their room and release your current web before teleporting.
 The native game loads the destination; shared enemies and puzzles resume there.
 
@@ -51,6 +53,8 @@ client, including players in other rooms. Your own character stays in place.
 **Stop spying** ends the stream. Spying also works with Observe rendering.
 Keep the watched DOSBox window restored; minimized windows have no preview.
 Only the DOSBox client area is captured, without changing focus.
+Scaled windows use colour-preserving downsampling; update the watched player's
+client as well to fix dark previews from older builds.
 
 Previews use 320 x 200 pixels, RGB565 and compression, at up to four images/sec.
 Capture starts only while watched. A shared capture serves multiple watchers;

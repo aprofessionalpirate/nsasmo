@@ -15,10 +15,15 @@ internal sealed class ThreadPause : IDisposable
     private const uint Failed = uint.MaxValue;
     private readonly List<SafeWaitHandle> threads = [];
     private readonly Mutex transaction;
+    private readonly int processId;
     private bool acquired;
+    private bool ownsSuspension;
+    [ThreadStatic]
+    private static HashSet<int>? pausedProcesses;
 
     internal ThreadPause(int processId)
     {
+        this.processId = processId;
         transaction = new Mutex(false, $"Local\\SpideyNet-Pause-{processId}");
         try
         {
@@ -38,6 +43,15 @@ internal sealed class ThreadPause : IDisposable
             {
                 throw new IOException("Timed out waiting for another game memory transaction.");
             }
+
+            // Nested bridge operations share the outer suspension as well as its mutex.
+            // Re-enumerating and suspending SDL/audio threads adds avoidable stalls.
+            pausedProcesses ??= [];
+            if (!pausedProcesses.Add(processId))
+            {
+                return;
+            }
+            ownsSuspension = true;
 
             using var process = Process.GetProcessById(processId);
             foreach (ProcessThread thread in process.Threads)
@@ -117,6 +131,11 @@ internal sealed class ThreadPause : IDisposable
             thread.Dispose();
         }
         threads.Clear();
+        if (ownsSuspension)
+        {
+            pausedProcesses!.Remove(processId);
+            ownsSuspension = false;
+        }
         if (acquired)
         {
             transaction.ReleaseMutex();

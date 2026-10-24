@@ -10,6 +10,8 @@
     <Compile Include="../Client/SessionView.cs" Link="SessionView.cs" />
     <Compile Include="../Client/SessionDiagnostics.cs" Link="SessionDiagnostics.cs" />
     <Compile Include="../Game/ThreadPause.cs" Link="ThreadPause.cs" />
+    <Compile Include="../Game/GameScreenScale.cs" Link="GameScreenScale.cs" />
+    <Compile Include="../Game/ScreenBitmapInfo.cs" Link="ScreenBitmapInfo.cs" />
     <ProjectReference Include="../Game/Game.csproj" />
     <ProjectReference Include="../Transport/Transport.csproj" />
   </ItemGroup>

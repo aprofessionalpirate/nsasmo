@@ -16,10 +16,14 @@ internal sealed partial class PlayerViewModel(Guid id) : ObservableObject
     [ObservableProperty]
     private string position = "";
 
+    [ObservableProperty]
+    private string health = "Unknown";
+
     internal void Update(PlayerState player)
     {
         Name = player.Name;
         Room = RoomNames.Get(player.Frame.Level);
         Position = $"{player.Frame.X}, {player.Frame.ScreenY}";
+        Health = player.Frame.HealthPercent is { } percent ? $"{percent} / 100" : "Unknown";
     }
 }

@@ -28,6 +28,14 @@ try
     data[39] = 0xC0;
     data[31] = 0x98;
     data[32] = 0x92;
+    // Health is read from the actor without changing its native 0..192 scale.
+    foreach (var (native, percent) in new (byte, int)[] { (0, 0), (1, 1), (96, 50), (192, 100), (255, 100) })
+    {
+        data[GameLayout.HealthOffset] = native;
+        Check(() => GameLayout.Decode(data, 2)?.HealthPercent == percent, "Scale native player health to 0..100");
+    }
+
+    data[GameLayout.HealthOffset] = GameLayout.MaxHealth;
     var source = data.ToArray();
     const byte StandingPose = 0x18;
     var guest = new GameFrame(2, 96, 147, 2, StandingPose);

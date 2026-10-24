@@ -76,10 +76,11 @@
 
       <Border Grid.Row="1" Grid.Column="1" Grid.RowSpan="4" Background="#1D2533" CornerRadius="10" Padding="16" MinHeight="180">
         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="12">
-          <Grid ColumnDefinitions="2*,2*,*">
+          <Grid ColumnDefinitions="2*,2*,*,*" ColumnSpacing="8">
             <TextBlock Text="PLAYER" FontWeight="SemiBold" Foreground="#A8B6CA" />
             <TextBlock Grid.Column="1" Text="ROOM" FontWeight="SemiBold" Foreground="#A8B6CA" />
             <TextBlock Grid.Column="2" Text="POSITION" FontWeight="SemiBold" Foreground="#A8B6CA" />
+            <TextBlock Grid.Column="3" Text="HEALTH" FontWeight="SemiBold" Foreground="#A8B6CA" />
           </Grid>
           <TextBlock Grid.Row="1" Text="Other players appear here when they join your room."
                      IsVisible="{Binding !HasPlayers}" TextWrapping="Wrap" Foreground="#A8B6CA" />
@@ -88,10 +89,11 @@
                    AutomationProperties.Name="Other players">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:PlayerViewModel">
-                <Grid ColumnDefinitions="2*,2*,*" ColumnSpacing="8" Margin="0,7">
+                <Grid ColumnDefinitions="2*,2*,*,*" ColumnSpacing="8" Margin="0,7">
                   <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="1" Text="{Binding Room}" TextWrapping="Wrap" />
                   <TextBlock Grid.Column="2" Text="{Binding Position}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Health}" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>

@@ -40,7 +40,12 @@ VGA games. Space-fired web lines are shared with other players in the same scree
 
 ## Find, join and watch players
 
-The player list shows native room names. Select a player, then choose
+The player list shows native room names and health out of 100 (the game uses
+192 for full health). Health is read without changing game memory. Older clients
+that do not report health appear as **Unknown**; update each client to share it.
+The existing protocol 8 relay remains compatible.
+
+Select a player, then choose
 **Teleport to player** to load their room and move to the position reported
 as you arrive, using the latest report in the destination room. Facing and
 collision origins match the target; normal game physics resumes immediately.

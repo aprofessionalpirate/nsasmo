@@ -27,6 +27,7 @@ public static class GameLayout
     public const int PreviousYOffset = 46;
     public const int PreviousFaceOffset = 47;
     public const int HealthOffset = 39;
+    public const int MaxHealth = 0xC0;
     public const byte HiddenCharacter = 0x5F;
 
     public static GameFrame? Decode(ReadOnlySpan<byte> record, byte level)
@@ -38,6 +39,6 @@ public static class GameLayout
         }
 
         return new GameFrame(level, BinaryPrimitives.ReadInt16LittleEndian(record[XOffset..]),
-            record[YOffset], record[FacingOffset], record[PoseOffset]);
+            record[YOffset], record[FacingOffset], record[PoseOffset], Health: record[HealthOffset]);
     }
 }

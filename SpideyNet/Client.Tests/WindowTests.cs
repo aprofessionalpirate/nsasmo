@@ -57,10 +57,11 @@ public sealed class WindowTests
         await model.RefreshGamesCommand.ExecuteAsync(null);
         model.ConnectCommand.Execute(null);
         var player = new SpideyNet.Core.PlayerState(Guid.NewGuid(), "Guest",
-            new SpideyNet.Core.GameFrame(17, 90, 147, 0, 24), 1);
+            new SpideyNet.Core.GameFrame(17, 90, 147, 0, 24, Health: 96), 1);
         service.View = service.View with { Players = [player] };
         await model.RefreshAsync();
         Dispatcher.UIThread.RunJobs();
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "50 / 100");
         var roster = window.GetVisualDescendants().OfType<ListBox>().Single();
         roster.SelectedIndex = 0;
         Dispatcher.UIThread.RunJobs();

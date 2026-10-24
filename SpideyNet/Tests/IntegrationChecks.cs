@@ -16,7 +16,7 @@ internal static class IntegrationChecks
         var first = new RelayClient();
         var second = new RelayClient();
         var isolated = new RelayClient();
-        var source = new GameFrame(2, 40, 100, 0, StandingPose);
+        var source = new GameFrame(2, 40, 100, 0, StandingPose, Health: 96);
         first.Publish(source, colour: SuitColour.Cyan);
         second.Publish(source with { X = 80 }, colour: SuitColour.Purple);
         isolated.Publish(source);
@@ -40,6 +40,10 @@ internal static class IntegrationChecks
             first.Publish(source with { Y = 250, Facing = 1, Pose = 18 }, colour: SuitColour.Blue);
             await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
                 && player.Frame.ScreenY == -6 && player.Colour == SuitColour.Blue) == true, stop.Token);
+            // Health updates must survive room changes and reach the other client's roster state.
+            first.Publish(source with { Health = 0 });
+            await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
+                && player.Frame.HealthPercent == 0) == true, stop.Token);
             const byte CeilingFacing = 4;
             first.Publish(source with { Pose = CrouchingPose, Facing = CeilingFacing });
             await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self

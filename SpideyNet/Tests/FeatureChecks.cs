@@ -25,6 +25,9 @@ internal static class FeatureChecks
             && hidden[GameLayout.DescriptorOffset] == 0x4B, "Hide stale actor geometry without replacing native pointers");
 
         var source = new GameFrame(1, 11, 147, 0, 0x18, new WebState(58, 154, 18, 154), true);
+        source = source with { Health = 96 };
+        Check(JsonSerializer.Deserialize<GameFrame>("{\"Level\":1,\"X\":11,\"Y\":147,\"Facing\":0,\"Pose\":24}")?.HealthPercent is null,
+            "Older peers have unknown health instead of an invented full-health value");
         var target = source with { X = 51, Web = null, WebHeld = false };
         Check(WebRules.Hits(source, target), "A visible native web can hit another player");
         Check(!WebRules.Hits(source with { WebHeld = false }, target), "Releasing Space prevents a new attachment");

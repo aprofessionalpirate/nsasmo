@@ -75,11 +75,12 @@ public sealed class ViewModelTests
         var model = new MainWindowViewModel(service, new FakeClipboardService());
         await model.RefreshGamesCommand.ExecuteAsync(null);
         model.ConnectCommand.Execute(null);
-        var frame = new GameFrame(3, 100, 100, 0, 0x18);
+        var frame = new GameFrame(3, 100, 100, 0, 0x18, Health: 192);
         var player = new PlayerState(Guid.NewGuid(), "Guest", frame, 1);
         service.View = new SessionView("Connected", "Lift", frame, [player], "Enemy owner: you");
         await model.RefreshAsync();
         var row = Assert.Single(model.Players);
+        Assert.Equal("100 / 100", row.Health);
         var locationChanges = 0;
         model.PropertyChanged += (_, args) =>
         {
@@ -88,11 +89,12 @@ public sealed class ViewModelTests
                 locationChanges++;
             }
         };
-        service.View = service.View with { Players = [player with { Frame = frame with { X = 110 } }] };
+        service.View = service.View with { Players = [player with { Frame = frame with { X = 110, Health = 96 } }] };
         await model.RefreshAsync();
         Assert.Same(row, Assert.Single(model.Players));
         Assert.Equal("110, 100", row.Position);
         Assert.Equal("Lift", row.Room);
+        Assert.Equal("50 / 100", row.Health);
         Assert.Contains("Enemy owner: you", model.Location);
         Assert.Equal(0, locationChanges);
         service.View = service.View with { Players = [] };

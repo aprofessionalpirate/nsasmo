@@ -251,7 +251,16 @@ it even when another player owns the enemies. Helicopters and platforms share
 their displacement and movement flags. The bridge rebuilds collision tiles and
 the VGA background from local game assets, and carries local riders with position
 corrections. No sprite pointers or remote tile payloads cross the network.
-Rider detection is approximate; two human players riding together remain unverified.
+Rider contact is checked against the platform from the same player's report, rather
+than a relay position that may be one tile behind. The current rider retains control
+while in contact. A new driver adopts the cached position without losing a native
+launch/stop command fired during handoff. Rider corrections move current bounds and
+previous coordinates together.
+
+Coloured player/web overlays restore touched cells from the current native tile map.
+They do not restore old helicopter pixels after its artwork has moved. Native moving
+scenery still advances in eight-pixel tile steps. Multiple human riders remain approximate;
+a three-game follower launch/stop and owner handoff were tested.
 
 Use a new room key when starting a new game. Shared progress lives in the relay;
 resetting only DOSBox would reapply the previous session's state. Disconnect

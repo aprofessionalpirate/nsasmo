@@ -316,7 +316,23 @@ internal static class TrioProbe
         await Task.Delay(300, token);
         Position(games[rider], 67, 100);
         await UntilAsync(() => games.All(game => SharedRules.Get(game.ReadScene()!.Puzzles, 4) == SwitchState.On), sessions, token);
-        await UntilAsync(() => games.All(game => game.ReadScene()!.Movers[0].Y < 0), sessions, token);
+        try
+        {
+            await UntilAsync(() => games.All(game => game.ReadScene()!.Movers[0].Y < 0), sessions, token);
+        }
+        catch
+        {
+            foreach (var game in games)
+            {
+                var current = game.ReadScene()!;
+                Console.WriteLine($"Helicopter launch stalled: {System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    current.Frame, current.Movers,
+                    Launch = SharedRules.Get(current.Puzzles, 4), Stop = SharedRules.Get(current.Puzzles, 5)
+                })}");
+            }
+            throw;
+        }
         Position(games[rider], 67);
         await Task.Delay(300, token);
         SetPuzzle(games[owner], 5, SwitchState.On);

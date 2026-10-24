@@ -17,12 +17,34 @@ internal sealed class SharedRooms
             var movers = room.Movers.Select(mover =>
             {
                 var riders = peers.Where(peer => peer.State?.Frame.Level == level
-                    && MoverRules.Riding(peer.State.Frame, mover)).ToArray();
+                    && Riding(peer, room, mover)).ToArray();
                 var driver = riders.FirstOrDefault(peer => peer.Id == mover.Owner) ?? riders.FirstOrDefault();
-                return mover with { Owner = driver?.Id ?? owner };
+                // A rider can trigger launch before the relay grants control. Adopt that
+                // native command on handoff, but keep the cached position to avoid a jump.
+                var motion = driver is not null && driver.Id != mover.Owner
+                    ? driver.Movers!.Movers.Single(value => MoverRules.SameShape(value, mover)).Motion : mover.Motion;
+                return mover with { Owner = driver?.Id ?? owner, Motion = motion };
             }).ToArray();
             rooms[level] = room with { Owner = owner, Epoch = owner == room.Owner ? room.Epoch : ++epoch, Movers = movers };
         }
+    }
+
+    private static bool Riding(Peer peer, RoomState room, MoverState mover)
+    {
+        var observation = peer.Movers;
+        if (observation is null || observation.Level != room.Level || observation.Sequence != peer.State!.Sequence)
+        {
+            return false;
+        }
+
+        // New drivers must first acknowledge this room's state. An existing driver can
+        // retain contact while acknowledging an enemy-owner epoch change.
+        if (observation.Epoch != room.Epoch && mover.Owner != peer.Id)
+        {
+            return false;
+        }
+        var observed = observation.Movers.SingleOrDefault(value => MoverRules.SameShape(value, mover));
+        return observed is not null && MoverRules.Riding(peer.State.Frame, observed);
     }
 
     internal void Apply(Peer peer, SharedReport report)

@@ -15,7 +15,7 @@ public static class MoverRules
         var left = (mover.Left + mover.X) * TileSize;
         var top = (mover.Top + mover.Y) * TileSize;
         return player.X + PlayerWidth > left && player.X < left + mover.Width * TileSize
-            && Math.Abs(player.Y + PlayerHeight - top) <= ContactTolerance;
+            && Math.Abs(player.ScreenY + PlayerHeight - top) <= ContactTolerance;
     }
 
     public static bool SameShape(MoverState first, MoverState second) => first.Mover == second.Mover

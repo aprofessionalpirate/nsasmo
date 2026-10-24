@@ -150,7 +150,8 @@ public sealed class GameBridge : IDisposable
 
     public GameScene? ReadScene()
     {
-        using var pause = memory.Pause();
+        // Sample a rider and its platform together, after native movement/carry has finished.
+        using var pause = frameBoundary?.Pause() ?? memory.Pause();
         var local = Read();
         if (local is null) { return null; }
         sceneMemory ??= new SceneMemory(memory, playerAddress - GameProfile.PlayerDataOffset, playerAddress);

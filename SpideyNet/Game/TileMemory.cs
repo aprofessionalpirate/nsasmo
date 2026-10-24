@@ -11,6 +11,7 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
     private const int SolidPointer = 0x98D6;
     private const int BackPointer = 0x98DA;
     private const int BackTiles = 0x235D;
+    private const int FrontTiles = 0x1F9D;
     private const int SpritePointer = 0x98DE;
     private const int SpriteBankFrames = 0x60;
     private const int RealModeLimit = 0x100000;
@@ -19,6 +20,39 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
     internal IReadOnlyList<(long Address, byte[] Data)> Plan(byte[] before, byte[] after)
     {
         if (before.AsSpan().SequenceEqual(after)) { return []; }
+        return PlanCells(Enumerable.Range(0, after.Length).Where(index => before[index] != after[index]), after);
+    }
+
+    internal IReadOnlyList<(long Address, byte[] Data)> RestoreOverlay(IReadOnlyList<PixelPatch> patches)
+    {
+        var raster = TileRaster.For((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]);
+        var buffer = Far(BufferPointer, Ram(), raster.BufferBytes);
+        var cells = new SortedSet<int>();
+        foreach (var patch in patches)
+        {
+            var start = patch.Address - buffer;
+            if (start < 0 || start + patch.After.Length > raster.BufferBytes)
+            {
+                continue;
+            }
+            for (var index = 0; index < patch.After.Length; index++)
+            {
+                if (patch.Before[index] == patch.After[index])
+                {
+                    continue;
+                }
+                var offset = (int)(start + index) % raster.PlaneBytes;
+                cells.Add(offset / raster.RowBytes / 8 * MoverRules.Columns + offset % raster.RowBytes);
+            }
+        }
+
+        // Rebuild touched cells from today's tile map, not yesterday's saved pixels.
+        // A cleared native pixel can equal an overlay's black outline by coincidence.
+        return cells.Count == 0 ? [] : PlanCells(cells, memory.Read(dataAddress + FrontTiles, MoverPlan.TileBytes));
+    }
+
+    private IReadOnlyList<(long Address, byte[] Data)> PlanCells(IEnumerable<int> cells, byte[] tiles)
+    {
         var raster = TileRaster.For((VideoMode)memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0]);
         var ram = Ram();
         var buffer = Far(BufferPointer, ram, raster.BufferBytes);
@@ -28,10 +62,9 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
         var saved = memory.Read(buffer, raster.BufferBytes);
         var painted = saved.ToArray();
         var sprites = new Dictionary<long, byte[]>();
-        for (var index = 0; index < after.Length; index++)
+        foreach (var index in cells)
         {
-            if (before[index] == after[index]) { continue; }
-            var character = after[index] & CharacterMask;
+            var character = tiles[index] & CharacterMask;
             var source = character == 0 ? background + backs[index] * raster.TileBytes : solid + character * raster.TileBytes;
             if (!sprites.TryGetValue(source, out var pixels))
             {

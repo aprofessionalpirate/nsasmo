@@ -129,6 +129,10 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                     {
                         throw new InvalidDataException("Invalid shared game state.");
                     }
+                    // Keep contact geometry paired with the same position update. A cached
+                    // platform can be a tile behind the rider's native simulation.
+                    peer.Movers = new MoverObservation(peer.State!.Frame.Level, update.Shared.Epoch,
+                        update.Sequence, update.Shared.Movers ?? []);
                     peer.SharedEpoch = update.Shared.Epoch;
                     shared.Apply(peer, update.Shared);
                     peer.SharedSerial = update.Shared.Serial;

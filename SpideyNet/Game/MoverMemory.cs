@@ -88,6 +88,14 @@ internal sealed class MoverMemory(ProcessMemory memory, long dataAddress, long p
         bounds[4] = unchecked((byte)(bounds[4] + carryY));
         bounds[5] = unchecked((byte)(bounds[5] + carryY));
         patches.Add((playerAddress + GameLayout.BoundsLeftOffset, bounds));
+
+        // Move native history by the same delta. Leaving it behind makes the next
+        // movement/collision pass see an artificial jump relative to the platform.
+        var previous = player.AsSpan(GameLayout.PreviousXOffset, 3).ToArray();
+        BinaryPrimitives.WriteInt16LittleEndian(previous,
+            checked((short)(BinaryPrimitives.ReadInt16LittleEndian(previous) + carryX)));
+        previous[2] = unchecked((byte)(previous[2] + carryY));
+        patches.Add((playerAddress + GameLayout.PreviousXOffset, previous));
         return patches;
     }
 }

@@ -62,19 +62,9 @@ internal sealed class WebMemory(ProcessMemory memory, long dataAddress, long lev
         // Room loading replaces the graphics; an old room's pixels no longer belong here.
         if (patches.Count > 0 && memory.Read(levelAddress, 1)[0] == ownedLevel)
         {
-            foreach (var patch in patches)
+            foreach (var patch in pixels.RestoreOverlay(patches))
             {
-                var current = memory.Read(patch.Address, patch.After.Length);
-                for (var index = 0; index < current.Length; index++)
-                {
-                    if (current[index] == patch.After[index])
-                    {
-                        current[index] = patch.Before[index];
-                    }
-                }
-
-                // Preserve any native tile or script redraw which happened since painting.
-                memory.Write(patch.Address, current);
+                memory.Write(patch.Address, patch.Data);
             }
         }
 

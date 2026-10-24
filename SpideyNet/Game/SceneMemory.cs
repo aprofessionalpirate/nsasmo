@@ -108,9 +108,22 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
             }
 
             // An owner must keep the live paused state, not rewind to an earlier sample.
-            var targets = room.Movers.Select(target => localPlayer == target.Owner
-                && moverOwners.GetValueOrDefault(target.Mover) == target.Owner
-                ? shapes.Single(shape => shape.State.Mover == target.Mover).State : target).ToArray();
+            var targets = room.Movers.Select(target =>
+            {
+                if (localPlayer != target.Owner)
+                {
+                    return target;
+                }
+                var live = shapes.Single(shape => shape.State.Mover == target.Mover).State;
+                if (moverOwners.GetValueOrDefault(target.Mover) == target.Owner)
+                {
+                    return live;
+                }
+
+                // Adopt the shared position once, but retain a rider's native launch/stop
+                // command if it fired while control was being granted by the relay.
+                return MoverRules.Riding(frame, live) ? target with { Motion = live.Motion } : target;
+            }).ToArray();
             patches.AddRange(movers.Plan(shapes, targets, frame));
         }
 

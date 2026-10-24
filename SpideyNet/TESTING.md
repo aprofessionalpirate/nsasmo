@@ -1,3 +1,23 @@
+# Helicopter rider and redraw checks - 24 October 2026
+
+- The relay's old cached-position contact test failed rider takeover when the rider's
+  native helicopter was one tile ahead. The updated real-socket check preserves
+  rider ownership through six movement steps. Direct authority checks also cover
+  a launch during takeover, cached position retention, epoch changes and stale reports.
+- The previous byte-comparison overlay restoration left five stale background bytes
+  after the first native helicopter redraw under a coloured rider. Rebuilding touched
+  cells from the current tile map passed 100 redraw/overlap cycles with zero stale bytes.
+- Native rider corrections move previous coordinates along with position and bounds.
+- Three disposable DOSBox games passed native follower helicopter launch/stop,
+  shared collision state, three room-transition rounds, owner departure and late rejoin.
+- Eight-player coloured room travel, 600 native-reference animated sprite captures,
+  all 15 Avalonia client tests and the full real-socket suite passed.
+
+Protocol remains 8; update both client and relay for the complete fix. Native scenery
+remains aligned to its eight-pixel tile grid. Simultaneous human riders are still approximate.
+
+---
+
 # Relay player logging checks - 23 October 2026
 
 Accepted WebSocket connections now log at Information level with name, player ID,

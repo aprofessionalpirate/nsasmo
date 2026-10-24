@@ -18,6 +18,7 @@ internal sealed class Peer(string name)
     internal ScreenFrame? Screen { get; set; }
     internal long ScreenAt { get; set; }
     internal ScreenFrame? SentScreen { get; set; }
+    internal MoverObservation? Movers { get; set; }
     internal long SharedEpoch { get; set; } = -1;
     internal long SharedSerial { get; set; }
     internal Channel<WorldState> Outbox { get; } = Channel.CreateBounded<WorldState>(

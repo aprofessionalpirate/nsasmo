@@ -67,6 +67,7 @@ try
     Check(() => !InteractionRules.WebHits(guest with { Facing = 2, X = 0 }, guest with { X = 40 }), "Web respects facing");
     Check(() => !InteractionRules.WebHits(guest, guest with { Level = 3 }), "Web cannot cross rooms");
     SharedChecks.Run();
+    MoverAuthorityChecks.Run();
     VideoChecks.Run();
     SpriteChecks.Run();
     PlayerEdgeChecks.Run();

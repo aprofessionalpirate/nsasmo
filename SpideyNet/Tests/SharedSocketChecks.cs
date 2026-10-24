@@ -38,12 +38,25 @@ internal static class SharedSocketChecks
             await Until(() => SharedRules.Get(first.World!.Shared!.Puzzles, 2) == SwitchState.Off, stop.Token);
             Check(() => first.World!.Shared!.Room!.Enemies.Single().Health == 96, "Stale owner cannot heal shared enemy");
 
-            second.Publish(frame with { X = 64 }, new SharedReport(seed, [], original.Epoch, [enemy], Movers: [helicopter]));
+            // The rider's own helicopter is already one native tile ahead of the relay.
+            // Its feet are nine pixels from the cached roof, but one pixel from its real roof.
+            second.Publish(frame with { X = 64, Y = 91 }, new SharedReport(seed, [], original.Epoch, [enemy],
+                Movers: [helicopter with { Y = -1 }]));
             await Until(() => second.World?.Shared?.Room?.Movers.Single().Owner == second.World?.Self, stop.Token);
             Check(() => first.World!.Shared!.Room!.Owner == first.World.Self, "A rider can drive scenery independently of enemy authority");
-            second.Publish(frame with { X = 64 }, new SharedReport(seed, [], original.Epoch, [enemy],
+            second.Publish(frame with { X = 64, Y = 91 }, new SharedReport(seed, [], original.Epoch, [enemy],
                 Movers: [helicopter with { Y = -1 }]));
             await Until(() => first.World?.Shared?.Room?.Movers.Single().Y == -1, stop.Token);
+
+            for (var step = 2; step <= 6; step++)
+            {
+                var offset = checked((sbyte)-step);
+                second.Publish(frame with { X = 64, Y = (byte)(99 - step * 8) },
+                    new SharedReport(seed, [], original.Epoch, [enemy], Movers: [helicopter with { Y = offset }]));
+                await Until(() => first.World?.Shared?.Room?.Movers.Single() is { } mover
+                    && mover.Y == offset && mover.Owner == second.World?.Self, stop.Token);
+            }
+            Console.WriteLine("Moving helicopter: rider takeover tolerates a tile of relay lag and ownership stays stable through six steps.");
 
             firstStop.Cancel();
             await Until(() => second.World?.Shared?.Room?.Owner == second.World?.Self, stop.Token);

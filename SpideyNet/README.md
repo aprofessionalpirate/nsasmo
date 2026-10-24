@@ -373,6 +373,13 @@ the disconnected UI without blocking its thread.
 
 Client and relay publish as framework-dependent single-file Windows x64 executables.
 
+To build and launch just the client, double-click
+[Run-Client.bat](../Run-Client.bat) at the repository root. It publishes the Release
+client to `outputs/Client.exe`, then opens it. Close any client running from that
+location before rebuilding. The launcher requires the .NET 10 SDK, works from
+any current directory, and waits for a key before its console closes. Publishing
+or launch failures return a nonzero exit code.
+
 For both executables in one folder, run `Build-Release.bat` from the repository
 root (or double-click it). It requires the .NET 10 SDK and creates
 `outputs/Client.exe` and `outputs/Relay.exe` beside the batch file. It works from

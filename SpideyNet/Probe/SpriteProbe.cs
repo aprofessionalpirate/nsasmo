@@ -22,7 +22,7 @@ internal static class SpriteProbe
         {
             Publish(original.Level);
             session.Connect(processId, endpoint, room, "Colour viewer", InjectionMode.Experimental,
-                InteractionMode.Disabled, SharedMode.Independent, true);
+                InteractionMode.Disabled, SharedMode.Independent, true, SuitColour.Purple);
             await WaitAsync(() => session.View.Players.Length == EnemyPlan.MaxGuests, session, stop.Token);
             foreach (var level in new byte[] { 3, 17, 25, original.Level })
             {
@@ -32,7 +32,7 @@ internal static class SpriteProbe
                 await session.TeleportAsync(session.View.Players[0].Id);
                 await WaitAsync(() => session.View.Local?.Level == level, session, stop.Token);
                 await Task.Delay(750, stop.Token);
-                if (game.Inspect().RenderHex != Convert.ToHexString(RenderPatch.Build(EnemyPlan.RenderCount)))
+                if (game.Inspect().RenderHex != Convert.ToHexString(RenderPatch.Build(EnemyPlan.RenderCount - 1)))
                 {
                     throw new IOException("The coloured guest session lost its renderer after travel.");
                 }
@@ -69,7 +69,7 @@ internal static class SpriteProbe
             for (var index = 0; index < peers.Length; index++)
             {
                 peers[index].Publish(new GameFrame(level, (short)(40 + index * 29), 147, (byte)(index % 8), 24,
-                    index == 0 ? new WebState(90, 110, 48, 150) : null));
+                    index == 0 ? new WebState(90, 110, 48, 150) : null), colour: (SuitColour)(index + 1));
             }
         }
     }
@@ -96,7 +96,7 @@ internal static class SpriteProbe
             .Select(index => local with { X = (short)(40 + index * 29), Y = 147, Pose = 24, Facing = 0, Web = null }).ToArray();
 
         // Freeze one transaction so native scenery cannot invalidate the restoration comparison.
-        using (var pause = new ThreadPause(processId))
+        using (var pause = game.BeginFrameTransaction())
         {
             var before = game.Inspect();
             var background = game.InspectScene()!.BackgroundHash;
@@ -105,6 +105,29 @@ internal static class SpriteProbe
             {
                 throw new IOException("Coloured sprites did not paint the backing buffer.");
             }
+
+            // Exercise every native pose/bank combination; coloured guests must never leave
+            // an on-screen native placeholder that can fetch unrelated sprite-bank data.
+            for (byte facing = 0; facing < 8; facing++)
+            {
+                for (byte pose = 0; pose < GameLayout.PlayerCharacterLimit; pose++)
+                {
+                    var frames = guests.Select(guest => guest with { Facing = facing, Pose = pose }).ToArray();
+                    game.Render(frames, InjectionMode.Experimental, true);
+                    var table = Convert.FromHexString(game.Inspect().TableHex);
+                    for (var slot = EnemyPlan.FirstSlot; slot <= EnemyPlan.MaxGuests; slot++)
+                    {
+                        var actor = table.AsSpan((slot - 1) * EnemyPlan.Stride, EnemyPlan.Stride);
+                        if (actor[GameLayout.FacingOffset] != 0
+                            || actor[GameLayout.CharacterOffset] != GameLayout.HiddenCharacter
+                            || actor[GameLayout.YOffset] < GameLayout.Height)
+                        {
+                            throw new IOException($"Visible native placeholder for coloured pose {pose}, facing {facing}.");
+                        }
+                    }
+                }
+            }
+            Console.WriteLine("All 32 poses and eight facings keep native placeholders hidden.");
 
             game.Render(guests, InjectionMode.Experimental);
             if (game.InspectScene()!.BackgroundHash != background)

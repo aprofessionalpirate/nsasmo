@@ -22,17 +22,28 @@ public sealed class WindowTests
         window.Show();
         await model.RefreshGamesCommand.ExecuteAsync(null);
         var choice = window.GetVisualDescendants().OfType<CheckBox>().Single();
+        Assert.True(model.DifferentColours);
+        choice.IsChecked = false;
+        Dispatcher.UIThread.RunJobs();
         Assert.False(model.DifferentColours);
         choice.IsChecked = true;
         Dispatcher.UIThread.RunJobs();
         Assert.True(model.DifferentColours);
+        var suit = window.GetVisualDescendants().OfType<ComboBox>()
+            .Single(combo => Equals(Avalonia.Automation.AutomationProperties.GetName(combo), "Your Spidey colour"));
+        suit.SelectedItem = SpideyNet.Core.SuitColour.Purple;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(SpideyNet.Core.SuitColour.Purple, model.Colour);
         model.ConnectCommand.Execute(null);
         Assert.True(service.Connection?.DifferentColours);
+        Assert.Equal(SpideyNet.Core.SuitColour.Purple, service.Connection?.Colour);
+        Assert.False(suit.IsEffectivelyEnabled);
         Assert.False(choice.IsEffectivelyEnabled);
         await model.ShutdownAsync();
         model.Rendering = SpideyNet.Game.InjectionMode.Observe;
         Dispatcher.UIThread.RunJobs();
         Assert.False(choice.IsEffectivelyEnabled);
+        Assert.False(suit.IsEffectivelyEnabled);
         window.Close();
     }
 

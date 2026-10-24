@@ -8,13 +8,13 @@ internal static class SpriteRaster
     private const int Width = 24;
     private const int Height = 21;
     private const int PlaneBytes = 63;
-    private static ReadOnlySpan<byte> Bright => [8, 9, 10, 11, 12, 3, 7];
-    private static ReadOnlySpan<byte> Shade => [12, 13, 14, 6, 1, 7, 4];
+    private static ReadOnlySpan<byte> Bright => [2, 8, 9, 10, 11, 12, 3, 7];
+    private static ReadOnlySpan<byte> Shade => [6, 12, 13, 14, 6, 1, 7, 4];
 
-    internal static void Paint(GameFrame frame, int style, ReadOnlySpan<byte> sprite, Span<byte> buffer)
+    internal static void Paint(GameFrame frame, SuitColour colourStyle, ReadOnlySpan<byte> sprite, Span<byte> buffer)
     {
         var raster = TileRaster.For(VideoMode.Vga);
-        if (!NetRules.Valid(frame) || style is < 0 or >= EnemyPlan.MaxGuests
+        if (!NetRules.Valid(frame) || !Enum.IsDefined(colourStyle)
             || sprite.Length != FrameBytes || buffer.Length != raster.BufferBytes)
         {
             throw new InvalidDataException("Invalid guest sprite or graphics buffer.");
@@ -56,7 +56,7 @@ internal static class SpriteRaster
                 {
                     continue;
                 }
-                colour = colour == 2 ? Bright[style] : colour == 6 ? Shade[style] : colour;
+                colour = colour == 2 ? Bright[(int)colourStyle] : colour == 6 ? Shade[(int)colourStyle] : colour;
                 var target = y * raster.RowBytes + x / 8;
                 var mask = 0x80 >> (x & 7);
                 for (var plane = 0; plane < raster.Planes; plane++)

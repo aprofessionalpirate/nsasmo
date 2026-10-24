@@ -197,8 +197,8 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
             || !GameProfile.Supports(memory.Read(dataAddress + GameProfile.ModeOffset, 1)[0])
             || !memory.Read(dataAddress + GameProfile.CodeFromData + SwitchCode, SwitchSignature.Length)
                 .AsSpan().SequenceEqual(SwitchSignature)
-            || !memory.Read(dataAddress + GameProfile.CodeFromData + GameProfile.RenderOffset, GameProfile.RenderPrefix.Length)
-                .AsSpan().SequenceEqual(GameProfile.RenderPrefix)
+            || !ActorDrawPlan.IsSupported(memory.Read(dataAddress + GameProfile.CodeFromData
+                + GameProfile.RenderOffset, ActorDrawPlan.Size))
             || !memory.Read(dataAddress + GameProfile.CodeFromData + GameProfile.RenderOffset
                 + GameProfile.CountInstruction + RenderPatch.Size, GameProfile.RenderSuffix.Length)
                 .AsSpan().SequenceEqual(GameProfile.RenderSuffix))

@@ -59,19 +59,26 @@ client as well to fix dark previews from older builds.
 Previews use 320 x 200 pixels, RGB565 and compression, at up to four images/sec.
 Capture starts only while watched. A shared capture serves multiple watchers;
 the relay routes each image only to its subscribers. Position updates remain
-at 30/sec. All clients and the relay must use protocol 6 for these features.
+at 30/sec. All clients and the relay must use protocol 7 for these features.
 
-## Optional player colours
+## Choose your suit colour
 
-Before connecting, enable **Different player colours** with Experimental rendering.
-Other players receive seven distinct suit colours on your screen. Your own player
-keeps the native red suit; eyes, outlines, blue clothing and white webs are preserved.
-The setting is local, defaults off and does not require matching relay settings.
-Disconnect to change it. Observe mode does not draw coloured sprites.
+Before connecting, choose **Your suit colour**: Red (the original suit), Cyan,
+Green, Purple, Orange, Blue, White or Grey. With **Show chosen suit colours
+(including yours)** enabled, your own Spider-Man and remote players use their
+chosen colours. Blue clothing, eyes, outlines and shading retain their detail.
+The choice follows each player's identity across rooms; duplicate colours are allowed.
 
-Colours follow the remote-player roster order, so joining or leaving can reassign
-them. Coloured guests are composited into the background and native actors draw
-over them when they overlap. No shared palette or sprite assets are modified.
+Uncheck that option to display original suits locally. Other players can still
+see your chosen colour. Observe mode never recolours game memory. Disconnect
+before changing your selection. Upgrade the relay and all clients to protocol 7.
+
+Rendering transactions wait until the native game has finished copying and drawing
+all four VGA planes. Suspending DOSBox mid-copy is insufficient: an animated suit
+can otherwise combine different poses in one displayed frame. Disconnect restores
+the native call sites. A small inert trampoline remains in a VGA-inactive code
+branch until DOSBox closes, so detachment cannot overwrite instructions it is
+still returning through. No palette or sprite assets are changed.
 
 ## Host the relay with Docker
 
@@ -82,7 +89,7 @@ docker compose -f SpideyNet/compose.yaml up -d --build
 Invoke-RestMethod http://127.0.0.1:5080/health
 ```
 
-The health response reports protocol 6. Use `ws://127.0.0.1:5080` in the client.
+The health response reports protocol 7. Use `ws://127.0.0.1:5080` in the client.
 Only the relay runs in Docker; DOSBox and the desktop client remain on Windows.
 The server needs no host .NET installation. The client still needs its runtime.
 
@@ -147,7 +154,7 @@ address literals. Use it only on a trusted LAN: room keys and traffic are unencr
 LAN hostnames and public addresses require `wss://`.
 
 Open `http://192.168.178.45:5000/health` from a player computer to verify reachability;
-it should return `{"protocol":6}`. If it times out, check the relay's listening
+it should return `{"protocol":7}`. If it times out, check the relay's listening
 address, Windows Firewall inbound TCP port 5000 on the Private profile, and network
 isolation between devices. With no endpoint configuration, the relay listens only
 on `http://localhost:5000`, which another computer cannot reach.
@@ -213,7 +220,7 @@ remain independent.
 
 Choose `Experimental` under **Enemies/puzzles** on every client. This requires
 experimental rendering. Choose `Independent` for the previous behavior or Observe.
-Client and relay must both use protocol version 6; replace older published builds.
+Client and relay must both use protocol version 7; replace older published builds.
 
 The first active player in each game room owns enemy movement. Other players
 receive position, facing, animation, health and death updates. Hits from any player reduce
@@ -314,6 +321,10 @@ dotnet run --project Probe --no-build -- --session-reentry ws://localhost:5080 <
 dotnet run --project Probe --no-build -- --web <process-id>
 # Repeated pull/render/release checks; disconnect that game's client first:
 dotnet run --project Probe --no-build -- --web-stress <process-id>
+# Pixel-for-pixel native pose references and rapid animated frame consistency:
+dotnet run --project Probe --no-build -- --animated-sprites <process-id>
+# Local suit choices and exact native state restoration:
+dotnet run --project Probe --no-build -- --suits <process-id>
 # Seven animated guest colours, native fallback and exact graphics restoration:
 dotnet run --project Probe --no-build -- --colours <process-id>
 # Seven socket peers and native coloured-room transitions; disposable game only:

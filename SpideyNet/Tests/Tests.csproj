@@ -9,6 +9,7 @@
     <Compile Include="../Game/SpriteRaster.cs" Link="SpriteRaster.cs" />
     <Compile Include="../Game/PlayerPlacement.cs" Link="PlayerPlacement.cs" />
     <Compile Include="../Game/GameProfile.cs" Link="GameProfile.cs" />
+    <Compile Include="../Game/ActorDrawPlan.cs" Link="ActorDrawPlan.cs" />
     <Compile Include="../Game/EnemyRecord.cs" Link="EnemyRecord.cs" />
     <ProjectReference Include="../Core/Core.csproj" />
     <ProjectReference Include="../Transport/Transport.csproj" />

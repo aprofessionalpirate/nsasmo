@@ -38,14 +38,14 @@ internal sealed class Session
     internal SessionView View => Volatile.Read(ref view);
 
     internal void Connect(int processId, Uri endpoint, string room, string name, InjectionMode mode, InteractionMode interactions,
-        SharedMode shared, bool differentColours = false)
+        SharedMode shared, bool differentColours = false, SuitColour colour = SuitColour.Red)
     {
         if (running is not null) { throw new InvalidOperationException("Disconnect first."); }
         canTeleport = mode == InjectionMode.Experimental;
         relay.Watch(null);
         stopping = null;
         lifetime = new CancellationTokenSource();
-        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, differentColours, lifetime.Token);
+        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, differentColours, colour, lifetime.Token);
     }
 
     internal void FireWeb() => relay.FireWeb();
@@ -96,7 +96,7 @@ internal sealed class Session
     }
 
     private async Task RunAsync(int processId, Uri endpoint, string room, string name,
-        InjectionMode mode, InteractionMode interactions, SharedMode shared, bool differentColours, CancellationToken token)
+        InjectionMode mode, InteractionMode interactions, SharedMode shared, bool differentColours, SuitColour colour, CancellationToken token)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
         var network = NetworkLoopAsync(endpoint, room, name, interactions, shared, linked.Token);
@@ -187,7 +187,7 @@ internal sealed class Session
                     if (shared == SharedMode.Experimental)
                     {
                         var scene = game.ReadScene();
-                        relay.Publish(scene?.Frame, scene is null ? null : sceneTrack.Capture(scene, state));
+                        relay.Publish(scene?.Frame, scene is null ? null : sceneTrack.Capture(scene, state), colour);
                         if (scene is not null && sceneTrack.Accept(scene, state) is { } correction)
                         {
                             sceneUpdate = new GameSceneUpdate(correction, state?.Self, scene.Puzzles);
@@ -198,7 +198,7 @@ internal sealed class Session
                             sceneUpdate = new GameSceneUpdate(null, null, null, ResumeEnemies: true);
                         }
                     }
-                    else { relay.Publish(local); }
+                    else { relay.Publish(local, colour: colour); }
                     if (interactions == InteractionMode.Experimental && mode == InjectionMode.Experimental
                         && Volatile.Read(ref teleport) is null && Environment.TickCount64 - travelledAt > 500)
                     {
@@ -223,9 +223,11 @@ internal sealed class Session
                     }
 
                     foreach (var id in tracks.Keys.Where(id => !players.Any(p => p.Id == id)).ToArray()) { tracks.Remove(id); }
-                    var frames = players.Select(p => tracks[p.Id].Sample(Environment.TickCount64))
-                        .OfType<GameFrame>().ToArray();
-                    game.Render(frames, mode, differentColours, sceneUpdate);
+                    // Keep appearance paired with identity when an interpolation track expires.
+                    var samples = players.Select(player => (Frame: tracks[player.Id].Sample(Environment.TickCount64), player.Colour))
+                        .Where(sample => sample.Frame is not null).ToArray();
+                    game.Render(samples.Select(sample => sample.Frame!).ToArray(), mode, differentColours, sceneUpdate,
+                        samples.Select(sample => sample.Colour).ToArray(), colour);
                     var owner = state?.Shared?.Room?.Owner;
                     var sharedStatus = shared == SharedMode.Independent ? "" : owner is null ? "Waiting for shared scene"
                         : owner == state!.Self ? "Enemy owner: you" : $"Enemy owner: {state.Players.FirstOrDefault(p => p.Id == owner)?.Name ?? "waiting"}";

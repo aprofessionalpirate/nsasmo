@@ -24,6 +24,7 @@ public sealed class GameBridge : IDisposable
     private SceneMemory? sceneMemory;
     private EnemyLoop? enemyLoop;
     private WebMemory? webMemory;
+    private FrameBoundary? frameBoundary;
     private const int RoomSettleMs = 100;
     private byte observedLevel;
     private long roomChangedAt;
@@ -44,6 +45,13 @@ public sealed class GameBridge : IDisposable
         catch { memory.Dispose(); throw; }
     }
 
+    // Diagnostics use the same native-frame boundary as production rendering.
+    public IDisposable BeginFrameTransaction()
+    {
+        frameBoundary ??= new FrameBoundary(memory, playerAddress - GameProfile.PlayerDataOffset);
+        return frameBoundary.Pause();
+    }
+
     public Task<ScreenFrame?> CaptureScreenAsync() => Task.Run(() => GameScreenCapture.Capture(processId));
 
     public bool TryTeleport(GameFrame destination)
@@ -53,7 +61,7 @@ public sealed class GameBridge : IDisposable
             throw new InvalidOperationException("Wait until the player is fully inside their room before teleporting.");
         }
 
-        using var pause = memory.Pause();
+        using var pause = frameBoundary?.Pause() ?? memory.Pause();
         travel ??= new RoomTravel(memory, playerAddress - GameProfile.PlayerDataOffset);
         var local = Read();
         if (travelStartedAt == 0 && local is not null && (local.WebHeld || local.Web is not null))
@@ -152,7 +160,7 @@ public sealed class GameBridge : IDisposable
     public void SyncScene(SharedState state, EnemyMode mode = EnemyMode.Native, Guid? localPlayer = null,
         byte[]? sampledPuzzles = null)
     {
-        using var pause = memory.Pause();
+        using var pause = frameBoundary?.Pause() ?? memory.Pause();
         var local = Read();
         if (local is null || state.Room is not null && state.Room.Level != local.Level)
         {
@@ -202,7 +210,7 @@ public sealed class GameBridge : IDisposable
             return;
         }
 
-        using var pause = memory.Pause();
+        using var pause = frameBoundary?.Pause() ?? memory.Pause();
         var local = Read();
         if (local is null || local.Level != authority.Frame.Level || !NetRules.Valid(authority.Frame)) { return; }
 
@@ -222,20 +230,22 @@ public sealed class GameBridge : IDisposable
     }
 
     public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode, bool differentColours = false,
-        GameSceneUpdate? sceneUpdate = null)
+        GameSceneUpdate? sceneUpdate = null, IReadOnlyList<SuitColour>? guestColours = null,
+        SuitColour localColour = SuitColour.Red)
     {
         if (mode == InjectionMode.Observe)
         {
+            using var observedPause = frameBoundary?.Pause();
             Restore();
             webMemory?.Restore();
             return;
         }
-        using var pause = memory.Pause();
-
-        if (guests.Count > EnemyPlan.MaxGuests)
+        if (guests.Count > EnemyPlan.MaxGuests || !Enum.IsDefined(localColour)
+            || guestColours is not null && (guestColours.Count != guests.Count || guestColours.Any(colour => !Enum.IsDefined(colour))))
         {
-            throw new InvalidDataException("Too many players for the reserved slots.");
+            throw new InvalidDataException("Invalid player count or suit colours.");
         }
+        using var pause = BeginFrameTransaction();
 
         // Restore transient pixels, apply scenery changes and repaint guests before DOSBox resumes.
         // Otherwise its draw loop can sample the cleared background between these operations.
@@ -264,7 +274,12 @@ public sealed class GameBridge : IDisposable
             Restore();
             throw new IOException("Enemy table changed; injection stopped.");
         }
-        if (!guests.Any(guest => guest.Level == local.Level)) { Restore(); return; }
+        var colourLocal = differentColours && localColour != SuitColour.Red;
+        if (!colourLocal && !guests.Any(guest => guest.Level == local.Level))
+        {
+            Restore();
+            return;
+        }
         if (count is 0 or > EnemyPlan.NativeCount)
         {
             throw new IOException("Enemy count does not match the known layout.");
@@ -276,7 +291,7 @@ public sealed class GameBridge : IDisposable
         {
             CheckRenderer();
             savedSlots = memory.Read(SlotAddress(), EnemyPlan.ReservedSize);
-            savedCode = memory.Read(RenderAddress(), RenderPatch.Size);
+            savedCode = memory.Read(RendererAddress(), ActorDrawPlan.Size);
             ownedCount = count;
             ownedLevel = local.Level;
             SaveGaps(count);
@@ -289,12 +304,9 @@ public sealed class GameBridge : IDisposable
         for (var index = 0; index < EnemyPlan.MaxGuests; index++)
         {
             var remote = index < guests.Count && guests[index].Level == local.Level ? guests[index] : null;
-            var actor = EnemyPlan.Build(player, remote, Descriptor(index));
-            if (differentColours)
-            {
-                // The backing-buffer compositor draws coloured guests; avoid a second native sprite.
-                actor[GameLayout.CharacterOffset] = GameLayout.HiddenCharacter;
-            }
+            // Coloured guests are drawn in the backing buffer. Keep their native slots off-screen:
+            // the hidden frame (0x5F) is only transparent in the normal bank, not the sideways bank.
+            var actor = EnemyPlan.Build(player, differentColours ? null : remote, Descriptor(index));
             actor.CopyTo(batch, index * EnemyPlan.Stride);
         }
 
@@ -305,23 +317,43 @@ public sealed class GameBridge : IDisposable
             Restore();
             return;
         }
-        var instruction = memory.Read(RenderAddress(), RenderPatch.Size);
-        var patchCode = RenderPatch.Build(EnemyPlan.RenderCount);
-        if (!instruction.AsSpan().SequenceEqual(savedCode) && !instruction.AsSpan().SequenceEqual(patchCode))
+        var instruction = memory.Read(RendererAddress(), ActorDrawPlan.Size);
+        var patchCode = ActorDrawPlan.Build(colourLocal);
+        if (!instruction.AsSpan().SequenceEqual(savedCode)
+            && !instruction.AsSpan().SequenceEqual(ActorDrawPlan.Build(false))
+            && !instruction.AsSpan().SequenceEqual(ActorDrawPlan.Build(true)))
         {
             throw new IOException("Renderer changed; restart DOSBox.");
         }
         memory.Write(SlotAddress(), batch);
         foreach (var patch in gapPatches) { memory.Write(patch.Address, patch.After); }
-        if (!instruction.AsSpan().SequenceEqual(patchCode)) { memory.Write(RenderAddress(), patchCode); }
+        if (!instruction.AsSpan().SequenceEqual(patchCode))
+        {
+            memory.Write(RendererAddress(), patchCode);
+        }
+
+        // Draw the local suit first, then remote suits; native enemies retain their own assets.
+        var sprites = new List<ColouredSprite>();
+        if (colourLocal)
+        {
+            sprites.Add(new ColouredSprite(local, localColour));
+        }
+        if (differentColours)
+        {
+            for (var index = 0; index < guests.Count; index++)
+            {
+                sprites.Add(new ColouredSprite(guests[index], guestColours?[index] ?? (SuitColour)(index + 1)));
+            }
+        }
         webMemory!.Update(guests.Where(guest => guest.Level == local.Level).Select(guest => guest.Web).OfType<WebState>().ToArray(),
-            local.Level, differentColours ? guests : null);
+            local.Level, sprites);
     }
 
     public void Dispose()
     {
         try
         {
+            using var pause = frameBoundary?.Pause();
             CancelTeleport();
             Restore();
             webMemory?.Restore();
@@ -329,7 +361,17 @@ public sealed class GameBridge : IDisposable
         finally
         {
             try { ResumeEnemies(); }
-            finally { memory.Dispose(); }
+            finally
+            {
+                try
+                {
+                    frameBoundary?.Dispose();
+                }
+                finally
+                {
+                    memory.Dispose();
+                }
+            }
         }
     }
 
@@ -363,14 +405,15 @@ public sealed class GameBridge : IDisposable
         ValidateMarkers();
         if (savedCode is not null)
         {
-            var current = memory.Read(RenderAddress(), RenderPatch.Size);
-            if (!current.AsSpan().SequenceEqual(RenderPatch.Build(EnemyPlan.RenderCount))
+            var current = memory.Read(RendererAddress(), ActorDrawPlan.Size);
+            if (!current.AsSpan().SequenceEqual(ActorDrawPlan.Build(false))
+                && !current.AsSpan().SequenceEqual(ActorDrawPlan.Build(true))
                 && !current.AsSpan().SequenceEqual(savedCode))
             {
                 throw new IOException("Renderer patch changed; restart DOSBox.");
             }
             // Restore code even after a room change; old actor backups are discarded.
-            memory.Write(RenderAddress(), savedCode);
+            memory.Write(RendererAddress(), savedCode);
             savedCode = null;
         }
         if (memory.Read(CurrentRoomAddress(), 1)[0] != ownedLevel
@@ -399,6 +442,8 @@ public sealed class GameBridge : IDisposable
 
     private long RenderAddress() => playerAddress - GameProfile.PlayerDataOffset + GameProfile.CodeFromData
         + GameProfile.RenderOffset + GameProfile.CountInstruction;
+
+    private long RendererAddress() => RenderAddress() - GameProfile.CountInstruction;
 
     private void CheckRenderer()
     {

@@ -41,8 +41,13 @@ internal sealed class ClientService : IClientService
             throw new ArgumentException("Observe mode requires disabled interactions and independent enemies/puzzles.");
         }
 
+        if (!Enum.IsDefined(connection.Colour))
+        {
+            throw new ArgumentException("Choose a supported Spidey colour.");
+        }
+
         session.Connect(connection.ProcessId, endpoint, room, name,
-            connection.Rendering, connection.Interactions, connection.Shared, connection.DifferentColours);
+            connection.Rendering, connection.Interactions, connection.Shared, connection.DifferentColours, connection.Colour);
     }
 
     public Task DisconnectAsync() => session.DisconnectAsync();

@@ -59,7 +59,7 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
         return Convert.ToHexString(SHA256.HashData(memory.Read(buffer, raster.BufferBytes)));
     }
 
-    internal IReadOnlyList<PixelPatch> PlanOverlay(IReadOnlyList<WebState> webs, IReadOnlyList<GameFrame>? guests, byte level)
+    internal IReadOnlyList<PixelPatch> PlanOverlay(IReadOnlyList<WebState> webs, IReadOnlyList<ColouredSprite>? guests, byte level)
     {
         if (webs.Count == 0 && (guests is null || guests.Count == 0))
         {
@@ -77,7 +77,7 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
             var sprites = Far(SpritePointer, ram, (SpriteBankFrames + GameLayout.PlayerCharacterLimit) * SpriteRaster.FrameBytes);
             for (var index = 0; index < guests.Count; index++)
             {
-                var guest = guests[index];
+                var guest = guests[index].Frame;
                 if (guest.Level != level)
                 {
                     continue;
@@ -85,7 +85,7 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
 
                 var frame = guest.Pose + ((guest.Facing & 1) != 0 ? SpriteBankFrames : 0);
                 var pixels = memory.Read(sprites + frame * SpriteRaster.FrameBytes, SpriteRaster.FrameBytes);
-                SpriteRaster.Paint(guest, index, pixels, after);
+                SpriteRaster.Paint(guest, guests[index].Colour, pixels, after);
             }
         }
 

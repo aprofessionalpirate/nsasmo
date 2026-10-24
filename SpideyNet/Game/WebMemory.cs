@@ -46,7 +46,7 @@ internal sealed class WebMemory(ProcessMemory memory, long dataAddress, long lev
         memory.Write(dataAddress + CoordinatesOffset, bytes);
     }
 
-    internal void Update(IReadOnlyList<WebState> webs, byte level, IReadOnlyList<GameFrame>? colouredGuests = null)
+    internal void Update(IReadOnlyList<WebState> webs, byte level, IReadOnlyList<ColouredSprite>? colouredGuests = null)
     {
         TryRestore();
         ownedLevel = level;

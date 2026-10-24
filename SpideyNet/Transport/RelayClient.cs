@@ -35,8 +35,8 @@ public sealed class RelayClient
     public WorldState? World => Environment.TickCount64 - Interlocked.Read(ref receivedAt) < NetRules.StaleMs
         ? Volatile.Read(ref world) : null;
 
-    public void Publish(GameFrame? frame, SharedReport? shared = null) => Volatile.Write(ref latest,
-        frame is null ? null : new ClientUpdate(NetRules.Version, 0, frame, Shared: shared));
+    public void Publish(GameFrame? frame, SharedReport? shared = null, SuitColour colour = SuitColour.Red) => Volatile.Write(ref latest,
+        frame is null ? null : new ClientUpdate(NetRules.Version, 0, frame, Shared: shared, Colour: colour));
     public void FireWeb() => Interlocked.CompareExchange(ref pendingAction, (int)PlayerAction.FireWeb, (int)PlayerAction.Move);
     public void Teleported() => Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Teleport);
 
@@ -67,7 +67,7 @@ public sealed class RelayClient
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
         await socket.ConnectAsync(address.Uri, lifetime.Token);
         var send = SendLoop(socket, lifetime.Token);
-        var receive = ReadLoop(socket, lifetime.Token);
+        var receive = ReadLoopAsync(socket, lifetime.Token);
 
         try
         {
@@ -111,7 +111,7 @@ public sealed class RelayClient
         }
     }
 
-    private async Task ReadLoop(ClientWebSocket socket, CancellationToken token)
+    private async Task ReadLoopAsync(ClientWebSocket socket, CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
@@ -127,7 +127,7 @@ public sealed class RelayClient
                 || state.Shared is not null && !SharedRules.Valid(state.Shared)
                 || state.Players.Any(p => p is null || p.Id == Guid.Empty || p.Frame is null
                     || p.Name is null || p.Name.Length is 0 or > NetRules.MaxNameLength
-                    || !Enum.IsDefined(p.Constraint) || !NetRules.Valid(p.Frame)))
+                    || !Enum.IsDefined(p.Constraint) || !Enum.IsDefined(p.Colour) || !NetRules.Valid(p.Frame)))
             {
                 throw new InvalidDataException("Invalid relay snapshot.");
             }

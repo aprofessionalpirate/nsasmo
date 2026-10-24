@@ -37,7 +37,10 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     private SharedMode shared = SharedMode.Experimental;
 
     [ObservableProperty]
-    private bool differentColours;
+    private bool differentColours = true;
+
+    [ObservableProperty]
+    private SuitColour colour = SuitColour.Red;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
@@ -85,6 +88,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     public ObservableCollection<PlayerViewModel> Players { get; } = [];
     public IReadOnlyList<InjectionMode> RenderingModes { get; } = Enum.GetValues<InjectionMode>();
     public IReadOnlyList<InteractionMode> InteractionModes { get; } = Enum.GetValues<InteractionMode>();
+    public IReadOnlyList<SuitColour> SuitColours { get; } = Enum.GetValues<SuitColour>();
     public IReadOnlyList<SharedMode> SharedModes { get; } = Enum.GetValues<SharedMode>();
     public bool CanEdit => !IsAttached && !IsBusy;
     public bool CanConfigureWorld => CanEdit && Rendering == InjectionMode.Experimental;
@@ -197,7 +201,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         try
         {
             var game = SelectedGame ?? throw new InvalidOperationException("Launch DOSBox, then refresh.");
-            service.Connect(new ClientConnection(game.Id, Endpoint, RoomKey, PlayerName, Rendering, Interactions, Shared, DifferentColours));
+            service.Connect(new ClientConnection(game.Id, Endpoint, RoomKey, PlayerName, Rendering, Interactions, Shared, DifferentColours, Colour));
             IsAttached = true;
             Status = "Connecting to relay";
         }

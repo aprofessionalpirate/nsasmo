@@ -17,8 +17,8 @@ internal static class IntegrationChecks
         var second = new RelayClient();
         var isolated = new RelayClient();
         var source = new GameFrame(2, 40, 100, 0, StandingPose);
-        first.Publish(source);
-        second.Publish(source with { X = 80 });
+        first.Publish(source, colour: SuitColour.Cyan);
+        second.Publish(source with { X = 80 }, colour: SuitColour.Purple);
         isolated.Publish(source);
         var tasks = new[]
         {
@@ -31,10 +31,16 @@ internal static class IntegrationChecks
             await UntilAsync(() => first.World?.Players.Length == 2 && second.World?.Players.Length == 2, stop.Token);
             await UntilAsync(() => isolated.World?.Players.Length == 1, stop.Token);
             Check(() => first.World!.Self != second.World!.Self, "Relay assigns distinct identities");
+            Check(() => second.World!.Players.Single(player => player.Id == first.World!.Self).Colour == SuitColour.Cyan
+                && first.World!.Players.Single(player => player.Id == second.World!.Self).Colour == SuitColour.Purple,
+                "Suit choices belong to player identities on both clients");
+            first.Publish(source with { Level = 3 }, colour: SuitColour.Green);
+            await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
+                && player.Frame.Level == 3 && player.Colour == SuitColour.Green) == true, stop.Token);
             const byte CeilingFacing = 4;
             first.Publish(source with { Pose = CrouchingPose, Facing = CeilingFacing });
             await UntilAsync(() => second.World?.Players.Any(p => p.Id == first.World!.Self
-                && p.Frame.Pose == CrouchingPose && p.Frame.Facing == CeilingFacing) == true, stop.Token);
+                && p.Frame.Pose == CrouchingPose && p.Frame.Facing == CeilingFacing && p.Colour == SuitColour.Red) == true, stop.Token);
             Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.Pose == StandingPose,
                 "Player animations remain independent");
             first.Publish(source);
@@ -66,6 +72,9 @@ internal static class IntegrationChecks
             var invalidWeb = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
                 source with { Web = new WebState(short.MaxValue, 0, 0, 0) }));
             await RejectCheckAsync(endpoint, invalidWeb, WebSocketMessageType.Text, stop.Token);
+            var invalidColour = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
+                source, Colour: (SuitColour)255));
+            await RejectCheckAsync(endpoint, invalidColour, WebSocketMessageType.Text, stop.Token);
             await CadenceCheckAsync(endpoint, stop.Token);
             Console.WriteLine("Relay checks: identities, room isolation, freeze/expiry, free crossing, native web/pull/release, fragmentation, capacity and invalid-message rejection.");
         }

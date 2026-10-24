@@ -22,15 +22,15 @@ internal static class SpriteChecks
         }
 
         // Check every suit style and both mirror axes against explicit source pixels.
-        var bright = new[] { 8, 9, 10, 11, 12, 3, 7 };
-        var shade = new[] { 12, 13, 14, 6, 1, 7, 4 };
-        for (var style = 0; style < EnemyPlan.MaxGuests; style++)
+        var bright = new[] { 2, 8, 9, 10, 11, 12, 3, 7 };
+        var shade = new[] { 6, 12, 13, 14, 6, 1, 7, 4 };
+        for (var style = 0; style < Enum.GetValues<SuitColour>().Length; style++)
         {
             for (byte facing = 0; facing < 8; facing++)
             {
                 var buffer = new byte[raster.BufferBytes];
                 var expected = buffer.ToArray();
-                SpriteRaster.Paint(new GameFrame(1, 32, 40, facing, 24), style, sprite, buffer);
+                SpriteRaster.Paint(new GameFrame(1, 32, 40, facing, 24), (SuitColour)style, sprite, buffer);
                 for (var x = 0; x < colours.Length; x++)
                 {
                     if (colours[x] == 15)
@@ -60,10 +60,17 @@ internal static class SpriteChecks
         }
 
         var edge = new byte[raster.BufferBytes];
-        SpriteRaster.Paint(new GameFrame(1, -1, 0, 0, 0), 0, sprite, edge);
+        SpriteRaster.Paint(new GameFrame(1, -1, 0, 0, 0), SuitColour.Cyan, sprite, edge);
         Check(ReadPixel(edge, 0, 1, raster) == 12, "Left-edge clipping retain the correct source pixel");
         Check(edge.Skip(1).Take(raster.RowBytes - 1).All(value => value == 0), "No wrapped row writes");
-        Console.WriteLine("Guest sprite colour checks passed.");
+        // Verify actor zero is skipped without extending the final actor or accepting mixed patches.
+        Check(ActorDrawPlan.Build(false).SequenceEqual(new byte[] { 0xBB, 0xB2, 0x92, 0xB9, 12, 0, 0x90 }), "Native player draw range");
+        Check(ActorDrawPlan.Build(true).SequenceEqual(new byte[] { 0xBB, 0xE4, 0x92, 0xB9, 11, 0, 0x90 }), "Composited player draw range");
+        Check(ActorDrawPlan.IsSupported(new byte[] { 0xBB, 0xB2, 0x92, 0x8B, 0x0E, 0x8B, 0x92 }), "Original renderer signature");
+        var mixed = ActorDrawPlan.Build(true);
+        mixed[4] = 12;
+        Check(!ActorDrawPlan.IsSupported(mixed), "Reject mismatched start/count patches");
+        Console.WriteLine("Eight suit palettes, sprite geometry and local/native draw-range checks passed.");
     }
 
     private static void SetPixel(byte[] buffer, int x, int y, int colour, TileRaster raster)

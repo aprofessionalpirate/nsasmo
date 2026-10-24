@@ -17,7 +17,7 @@
       </StackPanel>
 
       <Border Grid.Row="1" Background="#1D2533" CornerRadius="10" Padding="20">
-        <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+        <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
               ColumnSpacing="14" RowSpacing="10">
           <TextBlock Text="Relay address" VerticalAlignment="Center" />
           <TextBox Grid.Column="1" Text="{Binding Endpoint}" IsEnabled="{Binding CanEdit}"
@@ -46,9 +46,12 @@
           <TextBlock Grid.Row="6" Text="Enemies / puzzles" VerticalAlignment="Center" />
           <ComboBox Grid.Row="6" Grid.Column="1" ItemsSource="{Binding SharedModes}" SelectedItem="{Binding Shared}"
                     IsEnabled="{Binding CanConfigureWorld}" HorizontalAlignment="Stretch" AutomationProperties.Name="Enemies and puzzles" />
-          <CheckBox Grid.Row="7" Grid.ColumnSpan="2" Content="Different player colours"
+          <CheckBox Grid.Row="7" Grid.ColumnSpan="2" Content="Show chosen Spidey colours (including yours)"
                     IsChecked="{Binding DifferentColours}" IsEnabled="{Binding CanConfigureWorld}"
                     AutomationProperties.Name="Different player colours" />
+          <TextBlock Grid.Row="8" Text="Your Spidey colour" VerticalAlignment="Center" />
+          <ComboBox Grid.Row="8" Grid.Column="1" ItemsSource="{Binding SuitColours}" SelectedItem="{Binding Colour}"
+                    IsEnabled="{Binding CanConfigureWorld}" HorizontalAlignment="Stretch" AutomationProperties.Name="Your Spidey colour" />
         </Grid>
       </Border>
 

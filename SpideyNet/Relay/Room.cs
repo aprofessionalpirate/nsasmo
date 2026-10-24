@@ -36,7 +36,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
     {
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
         var send = SendLoop(socket, peer, lifetime.Token);
-        var receive = ReadLoop(socket, peer, lifetime.Token);
+        var receive = ReadLoopAsync(socket, peer, lifetime.Token);
         try
         {
             await await Task.WhenAny(send, receive);
@@ -74,7 +74,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
         }
     }
 
-    private async Task ReadLoop(WebSocket socket, Peer peer, CancellationToken token)
+    private async Task ReadLoopAsync(WebSocket socket, Peer peer, CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
@@ -93,7 +93,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                     peer.RateCount = 0;
                 }
                 if (++peer.RateCount > NetRules.MaxRate || update.Version != NetRules.Version
-                    || update.Frame is null || !NetRules.Valid(update.Frame)
+                    || update.Frame is null || !NetRules.Valid(update.Frame) || !Enum.IsDefined(update.Colour)
                     || update.Sequence <= (peer.State?.Sequence ?? 0))
                 {
                     throw new InvalidDataException("Invalid or excessive update.");
@@ -168,7 +168,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
             }
         }
 
-        peer.State = new PlayerState(peer.Id, peer.Name, frame, update.Sequence, constraint);
+        peer.State = new PlayerState(peer.Id, peer.Name, frame, update.Sequence, constraint, update.Colour);
         if (Interactions != InteractionMode.Experimental || update.Action != PlayerAction.FireWeb
             || constraint == ConstraintKind.Frozen || peer.WebReadyAt > now) { return; }
 

@@ -1,0 +1,17 @@
+# Allow only files needed to build the relay into the Docker context.
+**
+!Dockerfile
+!.dockerignore
+!Directory.Build.props
+!Directory.Build.targets
+!Directory.Packages.props
+!NuGet.Config
+!global.json
+!Core/
+!Core/**
+!Transport/
+!Transport/**
+!Relay/
+!Relay/**
+**/bin/
+**/obj/

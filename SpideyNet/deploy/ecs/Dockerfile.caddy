@@ -1,0 +1,11 @@
+FROM caddy:2
+
+# Only Caddy is public; both containers share the Fargate task's network.
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY start-caddy.sh /usr/local/bin/start-caddy.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start-caddy.sh \
+    && setcap -r /usr/bin/caddy \
+    && chown -R 10001:10001 /data /config
+
+USER 10001:10001
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/start-caddy.sh"]

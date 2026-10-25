@@ -1,9 +1,14 @@
-# The Not So Amazing Spider-Man Online
-This is an attempt to make the old DOS game 'The Amazing Spider-Man' capable of being played online.
-http://www.mobygames.com/game/amazing-spider-man
+# SpideyNet
 
-Project was created using Visual Studio 2017. If building, please use the MultiSpideyWinForms project.
-The Amazing Spider-Man needs to be launched using DOSBox and must be in game before operating the MultiSpideyWinForms application.
+Multiplayer for the DOS game *The Amazing Spider-Man*, using a .NET 10 client
+and relay. Each player runs the VGA game in DOSBox.
 
-What it essentially does is read the X/Y position of Spider-Man and level title from the memory values of The Amazing Spider-Man and send these to the other connected players.
-Right now it is extremely rough around the edges and the network code needs a lot of improvement.
+See [SpideyNet documentation](SpideyNet/README.md) for setup, features,
+hosting and testing.
+
+- [Run-Client.bat](Run-Client.bat): build and launch the client.
+- [Run-Server-LAN.bat](Run-Server-LAN.bat): build and host a relay on your LAN.
+- [Build-Release.bat](Build-Release.bat): publish both executables to `outputs`.
+
+The original WinForms multiplayer project, cheat tools and reverse-engineering
+files are preserved in [Legacy](Legacy/README.md).

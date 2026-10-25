@@ -43,6 +43,7 @@ dlldata.c
 # DNX
 project.lock.json
 artifacts/
+/outputs/
 
 *_i.c
 *_p.c
@@ -187,6 +188,9 @@ ClientBin/
 *.publishsettings
 node_modules/
 orleans.codegen.cs
+
+# Local rewrite research and diagnostic dependencies
+.research/
 
 # RIA/Silverlight projects
 Generated_Code/

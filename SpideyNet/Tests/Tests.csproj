@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Transport/RelayEndpointPolicy.cs" Link="RelayEndpointPolicy.cs" />
+    <Compile Include="../Game/VideoMode.cs" Link="VideoMode.cs" />
+    <Compile Include="../Game/TileRaster.cs" Link="TileRaster.cs" />
+    <Compile Include="../Game/SpriteRaster.cs" Link="SpriteRaster.cs" />
+    <Compile Include="../Game/PlayerPlacement.cs" Link="PlayerPlacement.cs" />
+    <Compile Include="../Game/GameProfile.cs" Link="GameProfile.cs" />
+    <Compile Include="../Game/ActorDrawPlan.cs" Link="ActorDrawPlan.cs" />
+    <Compile Include="../Game/EnemyRecord.cs" Link="EnemyRecord.cs" />
+    <Compile Include="../Relay/Peer.cs" Link="Relay/Peer.cs" />
+    <Compile Include="../Relay/MoverObservation.cs" Link="Relay/MoverObservation.cs" />
+    <Compile Include="../Relay/SharedRooms.cs" Link="Relay/SharedRooms.cs" />
+    <ProjectReference Include="../Core/Core.csproj" />
+    <ProjectReference Include="../Transport/Transport.csproj" />
+  </ItemGroup>
+</Project>

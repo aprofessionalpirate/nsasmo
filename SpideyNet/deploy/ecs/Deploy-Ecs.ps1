@@ -10,7 +10,9 @@ param(
     [string]$Profile = 'spideynet',
 
     [ValidateSet('Refresh', 'Cached')]
-    [string]$BaseImages = 'Refresh'
+    [string]$BaseImages = 'Refresh',
+
+    [switch]$UpdateOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -126,9 +128,30 @@ if ($publicRoute.Count -eq 0)
 }
 
 Invoke-Docker -Arguments @('info', '--format', '{{.OSType}}')
-Deploy-Stack -DesiredCount 0
+if ($UpdateOnly)
+{
+    # An update must never bootstrap a missing server or scale the live service down before a build.
+    try
+    {
+        $stack = (Invoke-Aws -Arguments @('cloudformation', 'describe-stacks', '--stack-name', $StackName, '--output', 'json')) | ConvertFrom-Json
+    }
+    catch
+    {
+        throw "Could not read the existing server stack '$StackName'. Check the saved settings and AWS access. If it does not exist, create it with Run-Server.bat first. $($_.Exception.Message)"
+    }
 
-$stack = (Invoke-Aws -Arguments @('cloudformation', 'describe-stacks', '--stack-name', $StackName, '--output', 'json')) | ConvertFrom-Json
+    if (@($stack.Stacks).Count -ne 1 -or $stack.Stacks[0].StackStatus -notin @(
+        'CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE', 'IMPORT_COMPLETE', 'IMPORT_ROLLBACK_COMPLETE'))
+    {
+        throw 'The existing server stack is not ready for an update. Wait for its current operation to finish or resolve its failed state first.'
+    }
+}
+else
+{
+    Deploy-Stack -DesiredCount 0
+    $stack = (Invoke-Aws -Arguments @('cloudformation', 'describe-stacks', '--stack-name', $StackName, '--output', 'json')) | ConvertFrom-Json
+}
+
 $outputs = @{}
 foreach ($entry in $stack.Stacks[0].Outputs)
 {

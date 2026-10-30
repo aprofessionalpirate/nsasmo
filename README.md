@@ -8,6 +8,7 @@ hosting and testing.
 
 - [Run-Client.bat](Run-Client.bat): build and launch the client.
 - [Run-Server-LAN.bat](Run-Server-LAN.bat): build and host a relay on your LAN.
+- [Update-Server.bat](Update-Server.bat): rebuild and update an existing AWS relay deployment.
 - [Build-Release.bat](Build-Release.bat): publish both executables to `outputs`.
 
 The original WinForms multiplayer project, cheat tools and reverse-engineering

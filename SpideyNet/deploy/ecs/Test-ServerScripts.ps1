@@ -3,6 +3,7 @@ $settings = Get-Content (Join-Path $PSScriptRoot 'server-settings.json') -Raw | 
 $global:ServerTest = @{
     Calls = [Collections.Generic.List[string]]::new()
     StackExists = $true
+    StackStatus = 'CREATE_COMPLETE'
     ServiceExists = $true
     WrongAccount = $false
     DenyDelete = $false
@@ -86,7 +87,7 @@ function global:aws
 
             return (@{ Stacks = @(@{
                 StackId = 'arn:aws:cloudformation:ap-southeast-2:123456789012:stack/spideynet-ecs/test'
-                StackStatus = 'CREATE_COMPLETE'
+                StackStatus = $global:ServerTest.StackStatus
                 Outputs = @(
                     @{ OutputKey = 'ClusterName'; OutputValue = 'spideynet-ecs' },
                     @{ OutputKey = 'ServiceName'; OutputValue = 'spideynet-ecs-relay' },
@@ -266,6 +267,49 @@ try
     Check ($firstDeployment -ne $secondDeployment) 'Give each run a fresh image tag'
     Check ($global:ServerTest.SignedIn -and $global:ServerTest.DockerReady) 'Sign in and start Docker when needed'
 
+    # Updates upload fresh source before a single deployment, without the Run bootstrap/stop step.
+    $global:ServerTest.Calls.Clear()
+    & (Join-Path $PSScriptRoot 'Manage-Server.ps1') -Action Update -BaseImages Cached
+    $calls = $global:ServerTest.Calls
+    $deployments = @($calls | Where-Object { $_ -match '^aws cloudformation deploy ' })
+    Check ($deployments.Count -eq 1 -and $deployments[0] -match 'DesiredCount=1') 'Update an existing server without scaling to zero'
+    Check ($deployments[0] -ne $secondDeployment) 'Give updates a fresh immutable image tag'
+    Check (@($calls | Where-Object { $_ -match '^docker build ' }).Count -eq 2) 'Rebuild relay and proxy for the shared image tag'
+    Check (@($calls | Where-Object { $_ -match '^docker build .*--pull' }).Count -eq 0) 'Forward cached base-image selection to updates'
+    $uploads = @($calls | Where-Object { $_ -match '^docker --config .* push ' })
+    Check ($uploads.Count -eq 2 -and $calls.IndexOf($uploads[-1]) -lt $calls.IndexOf($deployments[0])) 'Upload both images before replacing the running task'
+    Check (@($calls | Where-Object { $_ -match 'delete-stack|delete-repository|^aws ecs update-service' }).Count -eq 0) 'Preserve the existing stack and repositories during updates'
+    foreach ($wrapper in @('Run-Server.bat', 'Update-Server.bat', 'Stop-Server.bat'))
+    {
+        $batch = Get-Content (Join-Path $PSScriptRoot "../../../$wrapper") -Raw
+        $action = $wrapper.Split('-')[0]
+        Check (([regex]::Matches($batch, "-Action $action %\*")).Count -eq 2) "Forward settings through both PowerShell launch paths in $wrapper"
+        Check ($batch.Contains('if not defined SPIDEYNET_NO_PAUSE pause') -and $batch.Contains('exit /b %SERVER_EXIT_CODE%')) "Preserve pause and failure exit status in $wrapper"
+    }
+
+    # Failures before deployment must leave the old server alone.
+    foreach ($failure in @('Missing', 'Busy', 'Build', 'Push'))
+    {
+        $global:ServerTest.Calls.Clear()
+        $global:ServerTest.StackExists = $failure -ne 'Missing'
+        $global:ServerTest.StackStatus = if ($failure -eq 'Busy') { 'UPDATE_IN_PROGRESS' } else { 'UPDATE_COMPLETE' }
+        $global:ServerTest.BuildFailures = if ($failure -eq 'Build') { 1 } else { 0 }
+        $global:ServerTest.BuildError = 'error CS1002: ; expected'
+        $global:ServerTest.FailPush = $failure -eq 'Push'
+        $failed = $false
+        try { & (Join-Path $PSScriptRoot 'Manage-Server.ps1') -Action Update }
+        catch { $failed = $true }
+        Check $failed "Report an update $failure failure"
+        Check (@($global:ServerTest.Calls | Where-Object { $_ -match '^aws cloudformation deploy |^aws ecs update-service|delete-stack|delete-repository' }).Count -eq 0) "Leave the running deployment intact after an update $failure failure"
+        if ($failure -in @('Missing', 'Busy'))
+        {
+            Check (@($global:ServerTest.Calls | Where-Object { $_ -match '^docker build ' }).Count -eq 0) 'Reject missing or busy stacks before building'
+        }
+    }
+    $global:ServerTest.StackExists = $true
+    $global:ServerTest.StackStatus = 'UPDATE_COMPLETE'
+    $global:ServerTest.FailPush = $false
+
     $global:ServerTest.Calls.Clear()
     & (Join-Path $PSScriptRoot 'Manage-Server.ps1') -Action Stop
     $calls = $global:ServerTest.Calls
@@ -341,6 +385,12 @@ try
     catch { $failed = $_.Exception.Message -match 'Wrong AWS account' }
     Check $failed 'Reject the wrong AWS account'
     Check ($global:ServerTest.Calls.Count -eq 1) 'Make no resource changes in the wrong account'
+    $global:ServerTest.Calls.Clear()
+    $failed = $false
+    try { & (Join-Path $PSScriptRoot 'Manage-Server.ps1') -Action Update }
+    catch { $failed = $_.Exception.Message -match 'Wrong AWS account' }
+    Check $failed 'Reject the wrong AWS account during updates'
+    Check ($global:ServerTest.Calls.Count -eq 1) 'Do not build or mutate resources for an update in the wrong account'
     Write-Host 'Server lifecycle checks passed.'
 }
 finally

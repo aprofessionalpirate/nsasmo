@@ -22,12 +22,13 @@ subnet in `server-settings.json`:
 
 Replace `YOUR_AWS_ACCOUNT_ID` with your 12-digit AWS account ID before running.
 To keep your personal settings outside source control, copy this file to a local
-path and pass it to either batch file with `-SettingsPath C:\path\server-settings.json`.
+path and pass it to a batch file with `-SettingsPath C:\path\server-settings.json`.
 VPC and subnet IDs identify resources; they do not grant access, but a shared
 configuration must use IDs belonging to the account and region being deployed.
 
 ```bat
 Run-Server.bat
+Update-Server.bat
 Stop-Server.bat
 ```
 
@@ -37,6 +38,25 @@ new image tags, provisions the ECS stack and waits for trusted HTTPS. It does no
 pull or change your Git branch. Every run rebuilds from source; Docker only reuses
 layers whose inputs have not changed. Base images are refreshed by default.
 
+After pulling the source revision you want to deploy, run **Update-Server.bat**
+to rebuild and replace an existing server. It uses the same settings/profile as
+Run, requires an existing stable stack, and keeps the old service running during
+image builds and uploads. Build or upload failures leave that deployment alone.
+After both fresh images are uploaded, it updates the existing stack and waits
+for trusted HTTPS, then prints the connection URL and protocol. The task's public
+IP can change; players must use the newly printed URL.
+
+Updating disconnects players and resets in-memory rooms/progress when the task
+is replaced. It does not delete the stack or image repositories. Like Run, Update
+builds your current local source, including uncommitted changes; it does not pull
+Git, switch branches or use the published Windows `Relay.exe`.
+
+```bat
+Update-Server.bat
+Update-Server.bat -SettingsPath "C:\path\server-settings.json"
+Update-Server.bat -BaseImages Cached
+```
+
 Stop disconnects players and permanently deletes this ECS stack, its logs and
 both retained ECR repositories/images. It waits for tasks to stop before deleting
 images. Run recreates everything on the next start and prints a new endpoint.
@@ -44,7 +64,7 @@ Stopping twice is safe. Cleanup errors produce a nonzero exit code instead of
 claiming that charges have stopped. The existing EC2 instance, its disks, your
 VPC/subnet and the deployment user's IAM policies remain untouched.
 
-Both scripts work from any current directory and pause so double-clicked windows
+All three scripts work from any current directory and pause so double-clicked windows
 stay readable. Set `SPIDEYNET_NO_PAUSE=1` for unattended use. For a base-image
 registry outage, `Run-Server.bat -BaseImages Cached` still builds the latest local
 source using already cached base images.

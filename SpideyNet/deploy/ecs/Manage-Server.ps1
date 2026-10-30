@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Run', 'Stop')]
+    [ValidateSet('Run', 'Update', 'Stop')]
     [string]$Action,
 
     [string]$SettingsPath = (Join-Path $PSScriptRoot 'server-settings.json'),
@@ -87,9 +87,17 @@ if ($LASTEXITCODE -ne 0 -or $engine -ne 'linux')
     throw 'Docker must be running with Linux containers.'
 }
 
-Write-Host 'Building and uploading the current source. Existing sessions will be interrupted.'
+if ($Action -eq 'Update')
+{
+    Write-Host 'Building and uploading the current source before replacing the existing server. Sessions reset during deployment.'
+}
+else
+{
+    Write-Host 'Building and uploading the current source. Existing sessions will be interrupted.'
+}
 & (Join-Path $PSScriptRoot 'Deploy-Ecs.ps1') -VpcId $settings.VpcId -SubnetId $settings.SubnetId `
-    -Region $settings.Region -StackName $settings.StackName -Profile $settings.Profile -BaseImages $BaseImages
+    -Region $settings.Region -StackName $settings.StackName -Profile $settings.Profile -BaseImages $BaseImages `
+    -UpdateOnly:($Action -eq 'Update')
 
 $endpoint = & (Join-Path $PSScriptRoot 'Get-EcsEndpoint.ps1') -Region $settings.Region `
     -StackName $settings.StackName -Profile $settings.Profile -Output Object

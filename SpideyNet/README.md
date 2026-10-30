@@ -204,7 +204,12 @@ For a single-task AWS deployment without a domain or load balancer, see
 [the ECS Fargate trial](deploy/ecs/README.md). Its public IP changes when the task
 is replaced. It provisions billable resources only when its deployment script runs.
 Use [Run-Server.bat](../Run-Server.bat) at the repository root to build and host the
-current source. [Stop-Server.bat](../Stop-Server.bat) removes the ECS deployment,
+current source. After pulling a newer revision, run
+[Update-Server.bat](../Update-Server.bat) to rebuild and replace that existing
+server. It keeps the old service running during build/upload, then resets
+sessions and prints the new endpoint after deployment. It uses the same saved
+settings and also accepts `-SettingsPath` and `-BaseImages Cached`. No automatic
+Git pull is performed. [Stop-Server.bat](../Stop-Server.bat) removes the ECS deployment,
 logs and image repositories. The next run rebuilds and recreates them.
 
 Room keys are bearer secrets. The client generates a 96-bit random key.

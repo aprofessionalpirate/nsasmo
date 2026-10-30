@@ -31,6 +31,25 @@ internal static class FeatureChecks
             && hidden[GameLayout.YOffset] == 200 && hidden[GameLayout.HealthOffset] == 0
             && hidden[GameLayout.DescriptorOffset] == 0x4B, "Hide stale actor geometry without replacing native pointers");
 
+        // Air-locked's skeleton turns at X=-5: its mirrored box must remain at X=8..15.
+        var origins = new byte[] { 7, 7, 7, 0, 0, 7, 0, 0, 7, 0, 7, 7, 0, 0, 0, 7 };
+        var skeleton = new EnemyState(58, -5, 19, 0, 192, 0x26);
+        var replica = EnemyRecord.Place(livingHidden, skeleton, [8, 20], origins);
+        Check(BinaryPrimitives.ReadInt16LittleEndian(replica.AsSpan(GameLayout.BoundsLeftOffset)) == 8
+            && BinaryPrimitives.ReadInt16LittleEndian(replica.AsSpan(GameLayout.BoundsRightOffset)) == 15
+            && replica[GameLayout.BoundsTopOffset] == 20 && replica[GameLayout.BoundsBottomOffset] == 39,
+            "Mirrored enemy bounds prevent a false native room-exit death");
+        var sideways = EnemyRecord.Place(replica, skeleton with { Facing = 1 }, [8, 20], origins);
+        Check(sideways[29] == 20 && sideways[30] == 8
+            && BinaryPrimitives.ReadInt16LittleEndian(sideways.AsSpan(GameLayout.BoundsLeftOffset)) == -4,
+            "Transposed enemy poses swap their native collision dimensions");
+        var startup = EnemyRecord.Place(replica, skeleton with { Pose = GameLayout.HiddenCharacter }, [97, 0], origins);
+        Check(startup[29] == 8 && startup[30] == 20 && startup[GameLayout.HealthOffset] == 192,
+            "Hidden startup frames retain their live collision shape");
+        var replaced = new[] { 2, 3, 4, 5, 6, 29, 30, 33, 34, 35, 36, 37, 38 };
+        Check(Enumerable.Range(0, replica.Length).Except(replaced).All(index => replica[index] == livingHidden[index]),
+            "Replicated geometry preserves health, input, animation pointers and draw history");
+
         var source = new GameFrame(1, 11, 147, 0, 0x18, new WebState(58, 154, 18, 154), true);
         source = source with { Health = 96 };
         Check(JsonSerializer.Deserialize<GameFrame>("{\"Level\":1,\"X\":11,\"Y\":147,\"Facing\":0,\"Pose\":24}")?.HealthPercent is null,

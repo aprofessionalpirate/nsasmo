@@ -251,3 +251,18 @@ executes the input and shares resulting scenery/script state. For an originating
 owner, its consumed state is published after delivery acknowledgement.
 CS:`0x1AB0` skips already-on one-shot actions even though contact can latch; those
 contacts are excluded from pulse synthesis.
+
+# Air-locked replica bounds - 31 October 2026
+
+The room 32 skeleton turns at X=-5, facing 0, with an 8-pixel-wide collision
+box at X=8..15. Native CS:08DC reads pose dimensions at DS:AA3D and swaps them
+for transposed facing; CS:0EED anchors bounds using DS:A9AD. Translating the
+previous box by position alone ignores this mirrored origin. On a follower,
+the box could cross the screen boundary even while the skeleton remained on
+the platform. CS:0FEB then wraps the actor and CS:1084 clears its health;
+the relay correctly propagates that erroneous death to both screens.
+
+Replica placement now rebuilds dimensions and bounds from native pose/facing
+tables, preserving local animation pointers and prior draw history. Healthy
+hidden startup poses retain their previous dimensions because pose 0x5F has
+no usable collision shape. No protocol or relay change is needed.

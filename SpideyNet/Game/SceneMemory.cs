@@ -134,26 +134,15 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
             if (candidates.Length != 1) { throw new IOException("Native enemy identity mismatch; start the same game build."); }
             var actor = candidates[0];
             var local = actor.Data;
-            patches.Add((actor.Address + GameLayout.HealthOffset, [Math.Min(enemy.Health, local[GameLayout.HealthOffset])]));
             if (!preserveMotion && enemy.Health != 0)
             {
-                var position = new byte[4];
-                BinaryPrimitives.WriteInt16LittleEndian(position, enemy.X);
-                position[2] = enemy.Y;
-                position[3] = enemy.Facing;
-                patches.Add((actor.Address + GameLayout.XOffset, position));
-                patches.Add((actor.Address + GameLayout.CharacterOffset, [enemy.Pose]));
-
-                // Move collision bounds with replicas; keep prior draw coordinates local.
-                var dx = enemy.X - BinaryPrimitives.ReadInt16LittleEndian(local.AsSpan(GameLayout.XOffset));
-                var dy = enemy.Y - local[GameLayout.YOffset];
-                var bounds = local.AsSpan(GameLayout.BoundsLeftOffset, 6).ToArray();
-                BinaryPrimitives.WriteInt16LittleEndian(bounds, checked((short)(BinaryPrimitives.ReadInt16LittleEndian(bounds) + dx)));
-                BinaryPrimitives.WriteInt16LittleEndian(bounds.AsSpan(2), checked((short)(BinaryPrimitives.ReadInt16LittleEndian(bounds.AsSpan(2)) + dx)));
-                bounds[4] = unchecked((byte)(bounds[4] + dy));
-                bounds[5] = unchecked((byte)(bounds[5] + dy));
-                patches.Add((actor.Address + GameLayout.BoundsLeftOffset, bounds));
+                // Rebuild the replica's native shape whenever its pose or facing changes.
+                // Keep animation pointers and prior draw coordinates local to this process.
+                patches.Add((actor.Address, EnemyRecord.Place(local, enemy,
+                    memory.Read(dataAddress + 0xAA3D + enemy.Pose * 2, 2),
+                    memory.Read(dataAddress + 0xA9AD, 16))));
             }
+            patches.Add((actor.Address + GameLayout.HealthOffset, [Math.Min(enemy.Health, local[GameLayout.HealthOffset])]));
             if (enemy.Health != 0) { continue; }
             // Replicated death must leave inert bounds before the DOS wrap loop runs.
             patches.Add((actor.Address, EnemyRecord.Hide(local)));

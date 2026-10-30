@@ -46,9 +46,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     [NotifyPropertyChangedFor(nameof(CanChooseColour))]
     private SpriteChoice selectedSprite = new(PlayerSpriteRules.SpiderMan, "Spider-Man");
 
-    public IReadOnlyList<SpriteChoice> Sprites { get; } = new[] { new SpriteChoice(PlayerSpriteRules.SpiderMan, "Spider-Man") }
-        .Concat(Enumerable.Range(PlayerSpriteRules.FirstEnemy, PlayerSpriteRules.LastEnemy - PlayerSpriteRules.FirstEnemy + 1)
-            .Select(frame => new SpriteChoice((byte)frame, $"Enemy frame 0x{frame:X2}"))).ToArray();
+    public IReadOnlyList<SpriteChoice> Sprites { get; } = SpriteCatalogue.Choices;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]

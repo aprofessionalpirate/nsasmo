@@ -90,8 +90,10 @@ Older protocol versions cannot connect to this relay.
 
 Before connecting, choose **Your sprite**: Spider-Man (the default animated
 character), or any of 43 visible enemy frames (`0x20`–`0x4A`). Blank padding frames
-are excluded. Frame numbers identify the exact enemy pose, including animation
-variants and projectile artwork. Disconnect before changing your selection.
+are excluded. Descriptive names group the frames as Mummy, Skeleton, Shark fin,
+Bat, Robot, Green monster, Rat, Werewolf, Cowboy and Grim Reaper. These are visual
+guesses rather than official names. Pose numbers and native frame IDs distinguish
+animation variants and projectile artwork. Disconnect before changing your selection.
 
 Your chosen frame appears on your own screen and other clients, even when chosen
 Spidey colours are hidden. Enemy artwork retains its original colours; the Spidey

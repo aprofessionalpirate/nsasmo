@@ -17,8 +17,8 @@ internal static class IntegrationChecks
         var second = new RelayClient();
         var isolated = new RelayClient();
         var source = new GameFrame(2, 40, 100, 0, StandingPose, Health: 96);
-        first.Publish(source, colour: SuitColour.Cyan);
-        second.Publish(source with { X = 80 }, colour: SuitColour.Purple);
+        first.Publish(source, colour: SuitColour.Cyan, sprite: 0x20);
+        second.Publish(source with { X = 80 }, colour: SuitColour.Purple, sprite: 0x4A);
         isolated.Publish(source);
         var tasks = new[]
         {
@@ -34,9 +34,12 @@ internal static class IntegrationChecks
             Check(() => second.World!.Players.Single(player => player.Id == first.World!.Self).Colour == SuitColour.Cyan
                 && first.World!.Players.Single(player => player.Id == second.World!.Self).Colour == SuitColour.Purple,
                 "Suit choices belong to player identities on both clients");
-            first.Publish(source with { Level = 3 }, colour: SuitColour.Green);
+            Check(() => second.World!.Players.Single(player => player.Id == first.World!.Self).Sprite == 0x20
+                && first.World!.Players.Single(player => player.Id == second.World!.Self).Sprite == 0x4A,
+                "Enemy appearance is paired with each identity");
+            first.Publish(source with { Level = 3 }, colour: SuitColour.Green, sprite: 0x32);
             await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
-                && player.Frame.Level == 3 && player.Colour == SuitColour.Green) == true, stop.Token);
+                && player.Frame.Level == 3 && player.Colour == SuitColour.Green && player.Sprite == 0x32) == true, stop.Token);
             first.Publish(source with { Y = 250, Facing = 1, Pose = 18 }, colour: SuitColour.Blue);
             await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self
                 && player.Frame.ScreenY == -6 && player.Colour == SuitColour.Blue) == true, stop.Token);
@@ -82,6 +85,9 @@ internal static class IntegrationChecks
             var invalidColour = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
                 source, Colour: (SuitColour)255));
             await RejectCheckAsync(endpoint, invalidColour, WebSocketMessageType.Text, stop.Token);
+            var invalidSprite = JsonSerializer.SerializeToUtf8Bytes(new ClientUpdate(NetRules.Version, 1,
+                source, Sprite: GameLayout.HiddenCharacter));
+            await RejectCheckAsync(endpoint, invalidSprite, WebSocketMessageType.Text, stop.Token);
             await CadenceCheckAsync(endpoint, stop.Token);
             Console.WriteLine("Relay checks: identities, room isolation, freeze/expiry, free crossing, native web/pull/release, fragmentation, capacity and invalid-message rejection.");
         }

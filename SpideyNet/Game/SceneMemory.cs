@@ -39,7 +39,7 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
     {
         foreach (var actor in Actors(count))
         {
-            if (actor.Data[GameLayout.HealthOffset] == 0 || actor.Data[GameLayout.CharacterOffset] == GameLayout.HiddenCharacter)
+            if (actor.Data[GameLayout.HealthOffset] == 0)
             {
                 // Stale movement can send hidden actors far outside the renderer's clip range.
                 var hidden = EnemyRecord.Hide(actor.Data);
@@ -58,8 +58,9 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
         var enemies = actors.Select(actor => EnemyRecord.Decode(actor.Data, Mover(actor.Data))).ToArray();
         if (!SharedRules.Valid(enemies)) { throw new IOException("Unsupported native enemy state."); }
         var puzzles = memory.Read(dataAddress + PuzzleOffset, SharedRules.PuzzleBytes);
+        var events = Events(frame.Level, puzzles, out var pulseInputs);
         return new GameScene(frame, puzzles, enemies, movers.Read(count).Select(shape => shape.State).ToArray(),
-            Events(frame.Level, puzzles));
+            events, pulseInputs);
     }
 
     internal SceneStatus Inspect(GameScene scene)
@@ -238,11 +239,12 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
         throw new IOException("Unterminated room script.");
     }
 
-    private PuzzleChange[] Events(byte level, byte[] puzzles)
+    private PuzzleChange[] Events(byte level, byte[] puzzles, out int[] pulseInputs)
     {
         var count = memory.Read(dataAddress + TriggerCount, 1)[0];
         if (count > MaxTriggers) { throw new IOException("Unsupported switch table."); }
         var result = new List<PuzzleChange>();
+        var pulses = new List<int>();
         for (var index = 0; index < count; index++)
         {
             var record = memory.Read(dataAddress + TriggerOffset + index * TriggerStride, TriggerStride);
@@ -257,9 +259,16 @@ internal sealed class SceneMemory(ProcessMemory memory, long dataAddress, long p
             if ((record[3] & ContactFlag) != 0 && (previous & ContactFlag) == 0)
             {
                 // Native contact/web latches distinguish input from replicated script effects.
-                result.Add(new PuzzleChange(identity, SharedRules.Get(puzzles, identity)));
+                var value = SharedRules.Get(puzzles, identity);
+                result.Add(new PuzzleChange(identity, value));
+                // Already-on one-shot triggers can latch contact without running their script.
+                if ((record[3] & 0x20) == 0 || value == SwitchState.Off)
+                {
+                    pulses.Add(identity);
+                }
             }
         }
+        pulseInputs = pulses.ToArray();
         return result.ToArray();
     }
 }

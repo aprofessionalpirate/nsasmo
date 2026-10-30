@@ -75,9 +75,11 @@ try
     Check(() => !InteractionRules.WebHits(guest with { Facing = 2, X = 0 }, guest with { X = 40 }), "Web respects facing");
     Check(() => !InteractionRules.WebHits(guest, guest with { Level = 3 }), "Web cannot cross rooms");
     SharedChecks.Run();
+    PuzzlePulseChecks.Run();
     MoverAuthorityChecks.Run();
     VideoChecks.Run();
     SpriteChecks.Run();
+    PlayerSpriteChecks.Run();
     PlayerEdgeChecks.Run();
     PlacementChecks.Run();
     FeatureChecks.Run();
@@ -89,6 +91,7 @@ try
         await SpectatorChecks.RunAsync(new Uri(args[1]));
         await TauntSocketChecks.RunAsync(new Uri(args[1]));
         await EnemyOwnerSocketChecks.RunAsync(new Uri(args[1]));
+        await PuzzlePulseSocketChecks.RunAsync(new Uri(args[1]));
         await TrioInteractionChecks.RunAsync(new Uri(args[1]));
         await SharedSocketChecks.Run(new Uri(args[1]));
     }

@@ -228,3 +228,26 @@ side of the sprite. PlayerPlacement matches that routine, validates the native
 table, resets previous coordinates/facing, and preserves animation pointers,
 health and native animation flags. Session refreshes the destination position
 while loading rather than retaining only the first report.
+
+# Late-room loader and self-reset inputs - 31 October 2026
+
+The loader at CS:`0x02C2` calls CS:`0x1CBC` for five neighbouring room buffers,
+then the actual destination. Each call resets DS:`0x928B` to one actor before
+rebuilding the table. CS:`0x032D` clears DS:`0x1D0E` only after the final table is
+ready. A title match and elapsed time alone cannot distinguish intermediate
+Leo's Maze tables. Scene reads now require a clear request flag and a settled
+native count; changed overlay ownership is released rather than treated as fatal.
+
+Native traces in rooms 43 and 45 showed rat pose `0x5F` with health `0xC0`, followed
+by visible `0x3A`/`0x3B` poses without death. Only health zero is normalized or
+cleaned up as death. Rendering must not clear health for a temporary hidden pose.
+
+Roaring Flames switch 176 has script `E30D702C08`: it commands mover 78 and resets
+its own switch in the same frame. A follower's final boolean state can therefore
+match the baseline even though input occurred. Repeatable native input latches
+now produce serial-numbered PuzzlePulse reports, retained until acknowledged and
+deduplicated by peer/index/serial. The origin suppresses replay locally; the owner
+executes the input and shares resulting scenery/script state. For an originating
+owner, its consumed state is published after delivery acknowledgement.
+CS:`0x1AB0` skips already-on one-shot actions even though contact can latch; those
+contacts are excluded from pulse synthesis.

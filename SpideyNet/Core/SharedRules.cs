@@ -78,7 +78,11 @@ public static class SharedRules
         && report.Epoch >= 0 && report.Serial >= 0 && report.Changes is not null && report.Changes.Length <= MaxChanges
         && report.Changes.All(change => change is not null && change.Index is >= 0 and < MaxSwitches
             && Enum.IsDefined(change.State))
-        && report.Changes.Select(change => change.Index).Distinct().Count() == report.Changes.Length;
+        && report.Changes.Select(change => change.Index).Distinct().Count() == report.Changes.Length
+        && (report.Pulses is null || report.Pulses.Length <= MaxChanges
+            && report.Pulses.All(pulse => pulse is not null && pulse.Index is >= 0 and < MaxSwitches
+                && Enum.IsDefined(pulse.State) && pulse.Serial > 0 && pulse.Serial <= report.Serial)
+            && report.Pulses.Select(pulse => pulse.Index).Distinct().Count() == report.Pulses.Length);
 
     public static bool Valid(SharedState state) => Valid(state.Puzzles) && state.Acknowledged >= 0
         && (state.Room is null || state.Room.Level is > 0 and <= GameLayout.MaxLevel

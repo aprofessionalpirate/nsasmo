@@ -22,6 +22,7 @@ internal sealed class Peer(string name)
     internal MoverObservation? Movers { get; set; }
     internal long SharedEpoch { get; set; } = -1;
     internal long SharedSerial { get; set; }
+    internal Dictionary<int, long> PuzzlePulseSerials { get; } = [];
     internal Channel<WorldState> Outbox { get; } = Channel.CreateBounded<WorldState>(
         new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true, SingleWriter = true });

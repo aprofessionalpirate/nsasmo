@@ -11,7 +11,7 @@ internal static class SpriteRaster
     private static ReadOnlySpan<byte> Bright => [2, 8, 9, 10, 11, 12, 3, 7];
     private static ReadOnlySpan<byte> Shade => [6, 12, 13, 14, 6, 1, 7, 4];
 
-    internal static void Paint(GameFrame frame, SuitColour colourStyle, ReadOnlySpan<byte> sprite, Span<byte> buffer)
+    internal static void Paint(GameFrame frame, SuitColour colourStyle, ReadOnlySpan<byte> sprite, Span<byte> buffer, bool enemy = false)
     {
         var raster = TileRaster.For(VideoMode.Vga);
         if (!NetRules.Valid(frame) || !Enum.IsDefined(colourStyle)
@@ -24,7 +24,10 @@ internal static class SpriteRaster
         var mirrored = (frame.Facing & 2) != 0;
         var originX = frame.X - (mirrored ? 3 : 0);
         var originY = frame.ScreenY;
-        for (var row = 0; row < Height; row++)
+        var transpose = enemy && (frame.Facing & 1) != 0;
+        var width = transpose ? Height : Width;
+        var height = transpose ? Width : Height;
+        for (var row = 0; row < height; row++)
         {
             var y = originY + row;
             if (y is < 0 or >= GameLayout.Height)
@@ -32,8 +35,8 @@ internal static class SpriteRaster
                 continue;
             }
 
-            var sourceY = (frame.Facing & 4) != 0 ? Height - 1 - row : row;
-            for (var column = 0; column < Width; column++)
+            var drawY = (frame.Facing & 4) != 0 ? height - 1 - row : row;
+            for (var column = 0; column < width; column++)
             {
                 var x = originX + column;
                 if (x is < 0 or >= GameLayout.Width)
@@ -41,7 +44,9 @@ internal static class SpriteRaster
                     continue;
                 }
 
-                var sourceX = mirrored ? Width - 1 - column : column;
+                var drawX = mirrored ? width - 1 - column : column;
+                var sourceX = transpose ? drawY : drawX;
+                var sourceY = transpose ? drawX : drawY;
                 var source = sourceY * 3 + sourceX / 8;
                 var bit = 0x80 >> (sourceX & 7);
                 var colour = 0;
@@ -56,7 +61,10 @@ internal static class SpriteRaster
                 {
                     continue;
                 }
-                colour = colour == 2 ? Bright[(int)colourStyle] : colour == 6 ? Shade[(int)colourStyle] : colour;
+                if (!enemy)
+                {
+                    colour = colour == 2 ? Bright[(int)colourStyle] : colour == 6 ? Shade[(int)colourStyle] : colour;
+                }
                 var target = y * raster.RowBytes + x / 8;
                 var mask = 0x80 >> (x & 7);
                 for (var plane = 0; plane < raster.Planes; plane++)

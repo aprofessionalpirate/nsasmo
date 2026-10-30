@@ -56,8 +56,8 @@ public sealed class RelayClient
     public WorldState? World => Environment.TickCount64 - Interlocked.Read(ref receivedAt) < NetRules.StaleMs
         ? Volatile.Read(ref world) : null;
 
-    public void Publish(GameFrame? frame, SharedReport? shared = null, SuitColour colour = SuitColour.Red) => Volatile.Write(ref latest,
-        frame is null ? null : new ClientUpdate(NetRules.Version, 0, frame, Shared: shared, Colour: colour));
+    public void Publish(GameFrame? frame, SharedReport? shared = null, SuitColour colour = SuitColour.Red, byte sprite = PlayerSpriteRules.SpiderMan) => Volatile.Write(ref latest,
+        frame is null ? null : new ClientUpdate(NetRules.Version, 0, frame, Shared: shared, Colour: colour, Sprite: sprite));
     public void FireWeb() => Interlocked.CompareExchange(ref pendingAction, (int)PlayerAction.FireWeb, (int)PlayerAction.Move);
     public void Teleported() => Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Teleport);
 
@@ -160,7 +160,7 @@ public sealed class RelayClient
                 || lastTaunt is { } previousTaunt && state.TauntSerial < previousTaunt
                 || state.Players.Any(p => p is null || p.Id == Guid.Empty || p.Frame is null
                     || p.Name is null || p.Name.Length is 0 or > NetRules.MaxNameLength
-                    || !Enum.IsDefined(p.Constraint) || !Enum.IsDefined(p.Colour) || !NetRules.Valid(p.Frame)))
+                    || !Enum.IsDefined(p.Constraint) || !Enum.IsDefined(p.Colour) || !PlayerSpriteRules.Valid(p.Sprite) || !NetRules.Valid(p.Frame)))
             {
                 throw new InvalidDataException("Invalid relay snapshot.");
             }

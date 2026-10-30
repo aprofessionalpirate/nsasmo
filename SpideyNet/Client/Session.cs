@@ -38,14 +38,14 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
     internal SessionView View => Volatile.Read(ref view);
 
     internal void Connect(int processId, Uri endpoint, string room, string name, InjectionMode mode, InteractionMode interactions,
-        SharedMode shared, bool differentColours = false, SuitColour colour = SuitColour.Red)
+        SharedMode shared, bool differentColours = false, SuitColour colour = SuitColour.Red, byte sprite = PlayerSpriteRules.SpiderMan)
     {
         if (running is not null) { throw new InvalidOperationException("Disconnect first."); }
         canTeleport = mode == InjectionMode.Experimental;
         relay.Watch(null);
         stopping = null;
         lifetime = new CancellationTokenSource();
-        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, differentColours, colour, lifetime.Token);
+        running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, differentColours, colour, sprite, lifetime.Token);
     }
 
     internal void FireWeb() => relay.FireWeb();
@@ -98,7 +98,7 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
     }
 
     private async Task RunAsync(int processId, Uri endpoint, string room, string name,
-        InjectionMode mode, InteractionMode interactions, SharedMode shared, bool differentColours, SuitColour colour, CancellationToken token)
+        InjectionMode mode, InteractionMode interactions, SharedMode shared, bool differentColours, SuitColour colour, byte sprite, CancellationToken token)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
         var network = NetworkLoopAsync(endpoint, room, name, interactions, shared, linked.Token);
@@ -189,7 +189,7 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
                     if (shared == SharedMode.Experimental)
                     {
                         var scene = game.ReadScene();
-                        relay.Publish(scene?.Frame, scene is null ? null : sceneTrack.Capture(scene, state), colour);
+                        relay.Publish(scene?.Frame, scene is null ? null : sceneTrack.Capture(scene, state), colour, sprite);
                         if (scene is not null && sceneTrack.Accept(scene, state) is { } correction)
                         {
                             sceneUpdate = new GameSceneUpdate(correction, state?.Self, scene.Puzzles);
@@ -200,7 +200,7 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
                             sceneUpdate = new GameSceneUpdate(null, null, null, ResumeEnemies: true);
                         }
                     }
-                    else { relay.Publish(local, colour: colour); }
+                    else { relay.Publish(local, colour: colour, sprite: sprite); }
                     if (interactions == InteractionMode.Experimental && mode == InjectionMode.Experimental
                         && Volatile.Read(ref teleport) is null && Environment.TickCount64 - travelledAt > 500)
                     {
@@ -226,10 +226,11 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
 
                     foreach (var id in tracks.Keys.Where(id => !players.Any(p => p.Id == id)).ToArray()) { tracks.Remove(id); }
                     // Keep appearance paired with identity when an interpolation track expires.
-                    var samples = players.Select(player => (Frame: tracks[player.Id].Sample(Environment.TickCount64), player.Colour))
+                    var samples = players.Select(player => (Frame: tracks[player.Id].Sample(Environment.TickCount64), player.Colour, player.Sprite))
                         .Where(sample => sample.Frame is not null).ToArray();
                     game.Render(samples.Select(sample => sample.Frame!).ToArray(), mode, differentColours, sceneUpdate,
-                        samples.Select(sample => sample.Colour).ToArray(), colour);
+                        samples.Select(sample => sample.Colour).ToArray(), colour,
+                        samples.Select(sample => sample.Sprite).ToArray(), sprite);
                     var owner = state?.Shared?.Room?.Owner;
                     var sharedStatus = shared == SharedMode.Independent ? "" : owner is null ? "Waiting for shared scene"
                         : owner == state!.Self ? "Enemy owner: you" : $"Enemy owner: {state.Players.FirstOrDefault(p => p.Id == owner)?.Name ?? "waiting"}";

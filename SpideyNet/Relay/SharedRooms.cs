@@ -52,6 +52,15 @@ internal sealed class SharedRooms
     {
         puzzles ??= report.Seed.ToArray();
         foreach (var change in report.Changes) { SharedRules.Set(puzzles, change); }
+        foreach (var pulse in report.Pulses ?? [])
+        {
+            if (pulse.Serial > peer.PuzzlePulseSerials.GetValueOrDefault(pulse.Index))
+            {
+                // A self-resetting button ends at its old state. Replay its input once on the owner.
+                SharedRules.Set(puzzles, new PuzzleChange(pulse.Index, pulse.State));
+                peer.PuzzlePulseSerials[pulse.Index] = pulse.Serial;
+            }
+        }
         var level = peer.State!.Frame.Level;
         if (!rooms.TryGetValue(level, out var room))
         {

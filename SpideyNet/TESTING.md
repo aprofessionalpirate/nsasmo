@@ -1,3 +1,50 @@
+# Leo's Maze / Roaring Flames regression - 31 October 2026
+
+- Native-only traces in Leo's Maze rooms 42–45 and Roaring Flames (46) confirmed
+  live hidden-pose enemies and the loader's intermediate enemy tables.
+- A disposable-game check kept a rat's full health while forcing its hidden pose,
+  then changed a valid native count under an active overlay. No death was created,
+  and the count change deferred reads without throwing the previous table error.
+- Two real DOSBox games using production Session workers completed three rounds
+  through rooms 42, 43, 44, 45 and 46: 30 native room placements/transitions with
+  shared rendering and enemies. Every completed-room enemy stayed alive; neither
+  client stopped on an enemy-table change.
+- In the disposable follower, Roaring Flames's real switch 176 script was activated
+  with its input mode temporarily changed from web to contact for automation.
+  Its native self-resetting press reached the owner and moved platform 78. The
+  trigger flags were restored afterward. This is not a complete human playthrough.
+- Domain and real-socket pulse checks cover two simultaneous inputs, origin
+  suppression, retry deduplication, acknowledgement, one-shot exclusion, private-room
+  isolation and invalid input rejection. All 19 client tests and the full existing
+  domain/socket suite passed. Release build has zero warnings/errors.
+
+Protocol is now 11; update both client and relay. Existing false deaths are cached,
+so use fresh DOS games and a new private room key when checking an affected session.
+General healing/scripted resurrection of genuinely defeated enemies is still not modeled.
+
+---
+
+# Player sprite selector - 31 October 2026
+
+- Read the verified game's VGA sprite bank and identified 43 visible enemy frames
+  (`0x20`–`0x4A`); `0x4B`–`0x4F` are transparent padding and are not offered.
+- In a disposable Midnight game, every enemy frame matched native guest rendering
+  pixel-for-pixel. Another 344 local/remote frame/facing combinations left all 50
+  bytes of the actual player record intact. Native count, renderer and reserved
+  storage restored exactly after testing.
+- Enemy sideways poses transpose normal-bank pixels in software, avoiding the
+  unverified alternate enemy bank. Domain checks cover all eight facings, clipping,
+  transparency and original enemy colours. Existing Spider-Man raster checks pass.
+- Relay integration verifies per-player appearances, room changes, returning to
+  Spider-Man and rejection of invalid/hidden frame IDs. The full socket suite passed.
+- All 19 client tests passed, including the compiled selector binding, connection
+  options, configuration locking, Observe behavior and early invalid-ID rejection.
+
+This is a fixed-pose appearance selector; it does not run enemy AI or change native
+player mechanics. The feature requires protocol 10 clients and relay.
+
+---
+
 # Enemy ownership by room arrival - 30 October 2026
 
 The relay records an increasing arrival order whenever a player first reports a

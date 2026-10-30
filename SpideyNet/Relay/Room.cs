@@ -96,7 +96,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                     peer.RateCount = 0;
                 }
                 if (++peer.RateCount > NetRules.MaxRate || update.Version != NetRules.Version
-                    || update.Frame is null || !NetRules.Valid(update.Frame) || !Enum.IsDefined(update.Colour)
+                    || update.Frame is null || !NetRules.Valid(update.Frame) || !Enum.IsDefined(update.Colour) || !PlayerSpriteRules.Valid(update.Sprite)
                     || update.Sequence <= (peer.State?.Sequence ?? 0)
                     || update.Taunt is { } clip && !Enum.IsDefined(clip))
                 {
@@ -190,7 +190,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
             }
         }
 
-        peer.State = new PlayerState(peer.Id, peer.Name, frame, update.Sequence, constraint, update.Colour);
+        peer.State = new PlayerState(peer.Id, peer.Name, frame, update.Sequence, constraint, update.Colour, update.Sprite);
         if (Interactions != InteractionMode.Experimental || update.Action != PlayerAction.FireWeb
             || constraint == ConstraintKind.Frozen || peer.WebReadyAt > now) { return; }
 

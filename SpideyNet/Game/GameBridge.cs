@@ -26,6 +26,8 @@ public sealed class GameBridge : IDisposable
     private WebMemory? webMemory;
     private FrameBoundary? frameBoundary;
     private const int RoomSettleMs = 100;
+    private const int RoomRequestOffset = 0x1D0E;
+    private ushort observedCount;
     private byte observedLevel;
     private long roomChangedAt;
     private RoomTravel? travel;
@@ -40,6 +42,7 @@ public sealed class GameBridge : IDisposable
         {
             Locate(token);
             observedLevel = memory.Read(CurrentRoomAddress(), 1)[0];
+            observedCount = ReadCount();
             roomChangedAt = Environment.TickCount64 - RoomSettleMs;
         }
         catch { memory.Dispose(); throw; }
@@ -111,6 +114,13 @@ public sealed class GameBridge : IDisposable
             throw new IOException("SpideyNet requires VGA. Select VGA in the game's video menu.");
         }
 
+        // The loader builds several neighbouring-room tables before the actual destination.
+        // Repeated titles such as Leo's Maze cannot distinguish these intermediate tables.
+        if (memory.Read(playerAddress - GameProfile.PlayerDataOffset + RoomRequestOffset, 1)[0] != 0)
+        {
+            return null;
+        }
+
         var level = memory.Read(CurrentRoomAddress(), 1)[0];
         var data = memory.Read(playerAddress, GameLayout.RecordSize);
         if (level != memory.Read(CurrentRoomAddress(), 1)[0])
@@ -125,14 +135,16 @@ public sealed class GameBridge : IDisposable
 
         // The DOS loader changes the room index before finishing its object tables.
         // Wait briefly after transitions before publishing or patching that scene.
-        if (observedLevel != level)
+        var count = ReadCount();
+        if (observedLevel != level || observedCount != count)
         {
             observedLevel = level;
+            observedCount = count;
             roomChangedAt = Environment.TickCount64;
             sceneMemory?.Reset();
         }
 
-        if (Environment.TickCount64 - roomChangedAt < RoomSettleMs)
+        if (count is 0 or > EnemyPlan.NativeCount || Environment.TickCount64 - roomChangedAt < RoomSettleMs)
         {
             return null;
         }
@@ -232,7 +244,8 @@ public sealed class GameBridge : IDisposable
 
     public void Render(IReadOnlyList<GameFrame> guests, InjectionMode mode, bool differentColours = false,
         GameSceneUpdate? sceneUpdate = null, IReadOnlyList<SuitColour>? guestColours = null,
-        SuitColour localColour = SuitColour.Red)
+        SuitColour localColour = SuitColour.Red, IReadOnlyList<byte>? guestSprites = null,
+        byte localSprite = PlayerSpriteRules.SpiderMan)
     {
         if (mode == InjectionMode.Observe)
         {
@@ -241,10 +254,11 @@ public sealed class GameBridge : IDisposable
             webMemory?.Restore();
             return;
         }
-        if (guests.Count > EnemyPlan.MaxGuests || !Enum.IsDefined(localColour)
-            || guestColours is not null && (guestColours.Count != guests.Count || guestColours.Any(colour => !Enum.IsDefined(colour))))
+        if (guests.Count > EnemyPlan.MaxGuests || !Enum.IsDefined(localColour) || !PlayerSpriteRules.Valid(localSprite)
+            || guestColours is not null && (guestColours.Count != guests.Count || guestColours.Any(colour => !Enum.IsDefined(colour)))
+            || guestSprites is not null && (guestSprites.Count != guests.Count || guestSprites.Any(sprite => !PlayerSpriteRules.Valid(sprite))))
         {
-            throw new InvalidDataException("Invalid player count or suit colours.");
+            throw new InvalidDataException("Invalid player count or appearance.");
         }
         using var pause = BeginFrameTransaction();
 
@@ -272,11 +286,12 @@ public sealed class GameBridge : IDisposable
         var count = ReadCount();
         if (savedSlots is not null && count != ownedCount)
         {
+            // A valid native table change ends this overlay transaction; reacquire after settling.
             Restore();
-            throw new IOException("Enemy table changed; injection stopped.");
+            return;
         }
-        var colourLocal = differentColours && localColour != SuitColour.Red;
-        if (!colourLocal && !guests.Any(guest => guest.Level == local.Level))
+        var compositeLocal = localSprite != PlayerSpriteRules.SpiderMan || differentColours && localColour != SuitColour.Red;
+        if (!compositeLocal && !guests.Any(guest => guest.Level == local.Level))
         {
             Restore();
             return;
@@ -305,9 +320,11 @@ public sealed class GameBridge : IDisposable
         for (var index = 0; index < EnemyPlan.MaxGuests; index++)
         {
             var remote = index < guests.Count && guests[index].Level == local.Level ? guests[index] : null;
-            // Coloured guests are drawn in the backing buffer. Keep their native slots off-screen:
+            // Composited guests are drawn in the backing buffer. Keep their native slots off-screen:
             // the hidden frame (0x5F) is only transparent in the normal bank, not the sideways bank.
-            var actor = EnemyPlan.Build(player, differentColours ? null : remote, Descriptor(index));
+            var sprite = index < guests.Count ? guestSprites?[index] ?? PlayerSpriteRules.SpiderMan : PlayerSpriteRules.SpiderMan;
+            var compositeGuest = differentColours || sprite != PlayerSpriteRules.SpiderMan;
+            var actor = EnemyPlan.Build(player, compositeGuest ? null : remote, Descriptor(index));
             actor.CopyTo(batch, index * EnemyPlan.Stride);
         }
 
@@ -319,7 +336,7 @@ public sealed class GameBridge : IDisposable
             return;
         }
         var instruction = memory.Read(RendererAddress(), ActorDrawPlan.Size);
-        var patchCode = ActorDrawPlan.Build(colourLocal);
+        var patchCode = ActorDrawPlan.Build(compositeLocal);
         if (!instruction.AsSpan().SequenceEqual(savedCode)
             && !instruction.AsSpan().SequenceEqual(ActorDrawPlan.Build(false))
             && !instruction.AsSpan().SequenceEqual(ActorDrawPlan.Build(true)))
@@ -333,17 +350,18 @@ public sealed class GameBridge : IDisposable
             memory.Write(RendererAddress(), patchCode);
         }
 
-        // Draw the local suit first, then remote suits; native enemies retain their own assets.
+        // Appearance stays in the backing buffer; native player poses and collision data remain untouched.
         var sprites = new List<ColouredSprite>();
-        if (colourLocal)
+        if (compositeLocal)
         {
-            sprites.Add(new ColouredSprite(local, localColour));
+            sprites.Add(new ColouredSprite(local, localColour, localSprite));
         }
-        if (differentColours)
+        for (var index = 0; index < guests.Count; index++)
         {
-            for (var index = 0; index < guests.Count; index++)
+            var sprite = guestSprites?[index] ?? PlayerSpriteRules.SpiderMan;
+            if (differentColours || sprite != PlayerSpriteRules.SpiderMan)
             {
-                sprites.Add(new ColouredSprite(guests[index], guestColours?[index] ?? (SuitColour)(index + 1)));
+                sprites.Add(new ColouredSprite(guests[index], guestColours?[index] ?? (SuitColour)(index + 1), sprite));
             }
         }
         webMemory!.Update(guests.Where(guest => guest.Level == local.Level).Select(guest => guest.Web).OfType<WebState>().ToArray(),

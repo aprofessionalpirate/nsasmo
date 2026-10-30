@@ -4,6 +4,8 @@ public sealed class SharedTrack
 {
     private readonly Dictionary<int, PuzzleChange> pending = [];
     private readonly Dictionary<int, long> sent = [];
+    private readonly Dictionary<int, PuzzlePulse> pulses = [];
+    private readonly Dictionary<int, SwitchState> consumed = [];
     private long serial;
     private byte[]? baseline;
     private long tick = -1;
@@ -31,11 +33,22 @@ public sealed class SharedTrack
             var drivesScripts = world?.Shared?.PuzzleOwner == self && puzzleOwner == self
                 && world.Shared.Room?.Level == scene.Frame.Level;
             var roots = scene.Events?.Select(change => change.Index).ToHashSet() ?? [];
+            var pulseInputs = scene.PulseInputs?.ToHashSet() ?? [];
             for (var index = 0; index < SharedRules.MaxSwitches; index++)
             {
                 if (!drivesScripts && !roots.Contains(index)) { continue; }
                 var value = SharedRules.Get(scene.Puzzles, index);
-                if (value == SharedRules.Get(baseline, index)) { continue; }
+                if (value == SharedRules.Get(baseline, index))
+                {
+                    if (roots.Contains(index) && pulseInputs.Contains(index) && !pending.ContainsKey(index) && !pulses.ContainsKey(index))
+                    {
+                        // Native self-reset scripts can consume an entire press between samples.
+                        // Keep the latched input until acknowledged, without replaying it locally.
+                        pulses[index] = new PuzzlePulse(index, value == SwitchState.On ? SwitchState.Off : SwitchState.On, serial);
+                        consumed[index] = value;
+                    }
+                    continue;
+                }
                 pending[index] = new PuzzleChange(index, value);
                 sent[index] = serial;
             }
@@ -62,7 +75,7 @@ public sealed class SharedTrack
         var enemies = scene.Enemies.Select(enemy => damage.TryGetValue(enemy.Mover, out var hit)
             ? enemy with { Health = Math.Min(enemy.Health, hit.Health) } : enemy).ToArray();
         return new SharedReport(SharedRules.Normalize(scene.Puzzles), pending.Values.Take(SharedRules.MaxChanges).ToArray(), epoch,
-            enemies, serial, scene.Movers);
+            enemies, serial, scene.Movers, pulses.Values.Take(SharedRules.MaxChanges).ToArray());
     }
 
     public SharedState? Accept(GameScene scene, WorldState? world, long? nowMs = null)
@@ -88,8 +101,36 @@ public sealed class SharedTrack
             pending.Remove(index);
             sent.Remove(index);
         }
+        foreach (var input in pulses.Values.ToArray())
+        {
+            if (shared.Acknowledged < input.Serial)
+            {
+                continue;
+            }
+
+            pulses.Remove(input.Index);
+            if (shared.Room?.Owner == self && shared.Room.Level == scene.Frame.Level
+                && SharedRules.Get(shared.Puzzles, input.Index) == input.State)
+            {
+                // The originating owner already ran the script; publish its final state after input delivery.
+                pending[input.Index] = new PuzzleChange(input.Index, consumed[input.Index]);
+                sent[input.Index] = serial + 1;
+            }
+        }
+        foreach (var index in consumed.Keys.ToArray())
+        {
+            if (!pulses.ContainsKey(index) && SharedRules.Get(shared.Puzzles, index) == consumed[index])
+            {
+                consumed.Remove(index);
+            }
+        }
+
         var puzzles = shared.Puzzles.ToArray();
         foreach (var change in pending.Values) { SharedRules.Set(puzzles, change); }
+        foreach (var input in consumed)
+        {
+            SharedRules.Set(puzzles, new PuzzleChange(input.Key, input.Value));
+        }
         baseline = puzzles;
 
         var room = shared.Room;
@@ -163,6 +204,8 @@ public sealed class SharedTrack
         motionOwner = Guid.Empty;
         pending.Clear();
         sent.Clear();
+        pulses.Clear();
+        consumed.Clear();
         serial = 0;
         puzzleOwner = Guid.Empty;
         damage.Clear();

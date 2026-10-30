@@ -25,7 +25,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     private GameProcess? selectedGame;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
+    [NotifyPropertyChangedFor(nameof(CanConfigureWorld), nameof(CanChooseColour))]
     [NotifyCanExecuteChangedFor(nameof(TeleportCommand))]
     private InjectionMode rendering = InjectionMode.Experimental;
 
@@ -43,15 +43,23 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     private SuitColour colour = SuitColour.Red;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChooseColour))]
+    private SpriteChoice selectedSprite = new(PlayerSpriteRules.SpiderMan, "Spider-Man");
+
+    public IReadOnlyList<SpriteChoice> Sprites { get; } = new[] { new SpriteChoice(PlayerSpriteRules.SpiderMan, "Spider-Man") }
+        .Concat(Enumerable.Range(PlayerSpriteRules.FirstEnemy, PlayerSpriteRules.LastEnemy - PlayerSpriteRules.FirstEnemy + 1)
+            .Select(frame => new SpriteChoice((byte)frame, $"Enemy frame 0x{frame:X2}"))).ToArray();
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
-    [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
+    [NotifyPropertyChangedFor(nameof(CanConfigureWorld), nameof(CanChooseColour))]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(DisconnectCommand), nameof(RefreshGamesCommand),
         nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
     private bool isAttached;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
-    [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
+    [NotifyPropertyChangedFor(nameof(CanConfigureWorld), nameof(CanChooseColour))]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(RefreshGamesCommand), nameof(DisconnectCommand),
         nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
     private bool isBusy;
@@ -136,6 +144,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     public IReadOnlyList<SharedMode> SharedModes { get; } = Enum.GetValues<SharedMode>();
     public bool CanEdit => !IsAttached && !IsBusy;
     public bool CanConfigureWorld => CanEdit && Rendering == InjectionMode.Experimental;
+    public bool CanChooseColour => CanConfigureWorld && SelectedSprite.Frame == PlayerSpriteRules.SpiderMan;
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     public bool HasPlayers => Players.Count != 0;
 
@@ -245,7 +254,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         try
         {
             var game = SelectedGame ?? throw new InvalidOperationException("Launch DOSBox, then refresh.");
-            service.Connect(new ClientConnection(game.Id, Endpoint, RoomKey, PlayerName, Rendering, Interactions, Shared, DifferentColours, Colour));
+            service.Connect(new ClientConnection(game.Id, Endpoint, RoomKey, PlayerName, Rendering, Interactions, Shared, DifferentColours, Colour, SelectedSprite.Frame));
             IsAttached = true;
             Status = "Connecting to relay";
         }

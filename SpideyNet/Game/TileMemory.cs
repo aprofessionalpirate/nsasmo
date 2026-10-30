@@ -106,7 +106,7 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
         var after = before.ToArray();
         if (guests is not null)
         {
-            // Read native assets only. Alternate facing uses the game's pre-transposed bank.
+            // Spider-Man uses the native sideways bank; enemy selections stay in the verified normal bank.
             var sprites = Far(SpritePointer, ram, (SpriteBankFrames + GameLayout.PlayerCharacterLimit) * SpriteRaster.FrameBytes);
             for (var index = 0; index < guests.Count; index++)
             {
@@ -116,9 +116,11 @@ internal sealed class TileMemory(ProcessMemory memory, long dataAddress)
                     continue;
                 }
 
-                var frame = guest.Pose + ((guest.Facing & 1) != 0 ? SpriteBankFrames : 0);
+                var appearance = guests[index];
+                var frame = PlayerSpriteRules.SourceFrame(guest, appearance.Sprite);
                 var pixels = memory.Read(sprites + frame * SpriteRaster.FrameBytes, SpriteRaster.FrameBytes);
-                SpriteRaster.Paint(guest, guests[index].Colour, pixels, after);
+                SpriteRaster.Paint(guest, appearance.Colour, pixels, after,
+                    enemy: appearance.Sprite != PlayerSpriteRules.SpiderMan);
             }
         }
 

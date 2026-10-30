@@ -35,11 +35,13 @@ internal static class EnemyRecord
     {
         // Dead native actors can retain or accumulate unbounded off-screen positions.
         // Their identity and death matter; invisible coordinates must not stop a session.
-        if (actor[GameLayout.HealthOffset] == 0 || actor[GameLayout.CharacterOffset] == GameLayout.HiddenCharacter)
+        if (actor[GameLayout.HealthOffset] == 0)
         {
             return new EnemyState(mover, 0, 0, 0, 0, GameLayout.HiddenCharacter);
         }
 
+        // A live rat/mummy can briefly use the hidden pose while its native animation starts.
+        // Preserve its health so a temporary hide cannot become a permanent shared death.
         return new EnemyState(mover, BinaryPrimitives.ReadInt16LittleEndian(actor.AsSpan(GameLayout.XOffset)),
             actor[GameLayout.YOffset], actor[GameLayout.FacingOffset], actor[GameLayout.HealthOffset], actor[GameLayout.CharacterOffset]);
     }

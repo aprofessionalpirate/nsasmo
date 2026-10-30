@@ -16,6 +16,13 @@ internal static class FeatureChecks
         BinaryPrimitives.WriteInt16LittleEndian(actor.AsSpan(GameLayout.XOffset), 26000);
         BinaryPrimitives.WriteInt16LittleEndian(actor.AsSpan(GameLayout.PreviousXOffset), 25999);
         Check(SharedRules.Valid([EnemyRecord.Decode(actor, 1)]), "Dead off-screen actors remain valid domain state");
+        var livingHidden = actor.ToArray();
+        livingHidden[GameLayout.HealthOffset] = GameLayout.MaxHealth;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(livingHidden.AsSpan(GameLayout.XOffset), 102);
+        livingHidden[GameLayout.YOffset] = 53;
+        var concealed = EnemyRecord.Decode(livingHidden, 1);
+        Check(concealed.Health == GameLayout.MaxHealth && concealed.Pose == GameLayout.HiddenCharacter
+            && concealed.X == 102 && concealed.Y == 53, "A temporarily hidden living enemy is not shared as dead");
         var hidden = EnemyRecord.Hide(actor);
         Check(BinaryPrimitives.ReadInt16LittleEndian(hidden.AsSpan(GameLayout.XOffset)) == 0
             && BinaryPrimitives.ReadInt16LittleEndian(hidden.AsSpan(GameLayout.PreviousXOffset)) == 0

@@ -21,7 +21,8 @@ public sealed class WindowTests
         var window = new MainWindow { DataContext = model };
         window.Show();
         await model.RefreshGamesCommand.ExecuteAsync(null);
-        var choice = window.GetVisualDescendants().OfType<CheckBox>().Single();
+        var choice = window.GetVisualDescendants().OfType<CheckBox>()
+            .Single(check => AutomationProperties.GetName(check) == "Different player colours");
         Assert.True(model.DifferentColours);
         choice.IsChecked = false;
         Dispatcher.UIThread.RunJobs();

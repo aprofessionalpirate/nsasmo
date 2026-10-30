@@ -8,6 +8,7 @@ internal sealed class Peer(string name)
     internal Guid Id { get; } = Guid.NewGuid();
     internal string Name { get; } = name;
     internal PlayerState? State { get; set; }
+    internal long RoomEntryOrder { get; set; }
     internal long LastSeen { get; set; } = Environment.TickCount64;
     internal long RateStart { get; set; } = Environment.TickCount64;
     internal int RateCount { get; set; }

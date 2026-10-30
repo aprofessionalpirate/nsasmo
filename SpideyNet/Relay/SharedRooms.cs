@@ -13,7 +13,8 @@ internal sealed class SharedRooms
         foreach (var level in rooms.Keys.ToArray())
         {
             var room = rooms[level];
-            var owner = peers.FirstOrDefault(peer => peer.State?.Frame.Level == level && peer.SharedEpoch >= 0)?.Id ?? Guid.Empty;
+            var owner = peers.Where(peer => peer.State?.Frame.Level == level && peer.SharedEpoch >= 0)
+                .OrderBy(peer => peer.RoomEntryOrder).FirstOrDefault()?.Id ?? Guid.Empty;
             var movers = room.Movers.Select(mover =>
             {
                 var riders = peers.Where(peer => peer.State?.Frame.Level == level

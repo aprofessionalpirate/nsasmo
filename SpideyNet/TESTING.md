@@ -1,3 +1,42 @@
+# Enemy ownership by room arrival - 30 October 2026
+
+The relay records an increasing arrival order whenever a player first reports a
+native game room, changes rooms or returns after a stale timeout. Enemy ownership
+uses the earliest active, shared-state participant in that room. Leaving and
+returning does not restore the player's old priority. Rider control remains
+independent of enemy ownership.
+
+A real three-client socket check verified that an earlier relay connection cannot
+preempt a later-connected player who reached the game room first. Same-room
+updates preserve the owner and epoch. Room departures, returning former owners,
+stale players and disconnects transfer authority to the next earliest occupant.
+The full domain and socket suite passed, including helicopter driver handoff,
+shared damage, puzzles, taunts and previews. Release solution build: zero warnings
+and errors. This is a relay-only behavior change; protocol remains 9.
+
+---
+
+# Voice taunts - 30 October 2026
+
+- Extracted instruments 11–15 from the supplied `spidey3.mod`, without backing music.
+  Re-running the standard-library extraction script produces byte-identical WAVs.
+- All 17 Avalonia/client tests pass, including selector binding, local preview,
+  repeated sends without a cooldown, mute, shutdown cleanup and embedded PCM resources.
+- Real sockets verified sender identity/echo, cross-game-room delivery within a
+  private room, ordered bursts, duplicate suppression, private-room isolation,
+  late joins, reconnects and rejection of unknown clip IDs. Domain checks cover
+  bounded retained history and expiry; the existing complete socket suite passed.
+- Windows accepted all five embedded clips through the production audio driver.
+  Replacing the pinned buffer 100 times under garbage collection and stopping it
+  completed without errors. This checks native playback acceptance and memory
+  lifetime, not a recorded/transcribed listening comparison.
+
+Taunts use protocol 9. Update the relay and every client together. Audio does not
+change DOSBox memory, and no additional runtime package or external WAV folder is
+required. New taunts replace current playback; there is no time-based cooldown.
+
+---
+
 # Helicopter rider and redraw checks - 24 October 2026
 
 - The relay's old cached-position contact test failed rider takeover when the rider's

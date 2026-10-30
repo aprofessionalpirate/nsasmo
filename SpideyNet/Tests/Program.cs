@@ -82,10 +82,13 @@ try
     PlacementChecks.Run();
     FeatureChecks.Run();
     RelayEndpointChecks.Run();
+    TauntChecks.Run();
     if (args.Length == 2 && args[0] == "--relay")
     {
         await IntegrationChecks.RunAsync(new Uri(args[1]));
         await SpectatorChecks.RunAsync(new Uri(args[1]));
+        await TauntSocketChecks.RunAsync(new Uri(args[1]));
+        await EnemyOwnerSocketChecks.RunAsync(new Uri(args[1]));
         await TrioInteractionChecks.RunAsync(new Uri(args[1]));
         await SharedSocketChecks.Run(new Uri(args[1]));
     }

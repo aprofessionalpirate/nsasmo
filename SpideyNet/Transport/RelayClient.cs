@@ -1,10 +1,14 @@
 using System.Net.WebSockets;
+using System.Threading.Channels;
 using SpideyNet.Core;
 
 namespace SpideyNet.Transport;
 
 public sealed class RelayClient
 {
+    private readonly Channel<TauntId> pendingTaunts = Channel.CreateBounded<TauntId>(TauntRules.MaxEvents);
+    private readonly Channel<TauntEvent> receivedTaunts = Channel.CreateBounded<TauntEvent>(
+        new BoundedChannelOptions(TauntRules.MaxEvents) { FullMode = BoundedChannelFullMode.DropOldest });
     private WorldState? world;
     private ClientUpdate? latest;
     private long receivedAt;
@@ -22,6 +26,23 @@ public sealed class RelayClient
             return image?.Player == Volatile.Read(ref watching)?.Player
                 && Environment.TickCount64 - Interlocked.Read(ref screenReceivedAt) < NetRules.StaleMs ? image : null;
         }
+    }
+
+    public bool SendTaunt(TauntId clip)
+    {
+        return Enum.IsDefined(clip) && World is not null && Volatile.Read(ref latest) is not null
+            && pendingTaunts.Writer.TryWrite(clip);
+    }
+
+    public TauntEvent[] TakeTaunts()
+    {
+        var events = new List<TauntEvent>();
+        while (receivedTaunts.Reader.TryRead(out var item))
+        {
+            events.Add(item);
+        }
+
+        return events.ToArray();
     }
 
     public void Watch(Guid? player)
@@ -84,6 +105,14 @@ public sealed class RelayClient
             try { await Task.WhenAll(send, receive); }
             catch (Exception) when (lifetime.IsCancellationRequested) { }
             Volatile.Write(ref world, null);
+            while (pendingTaunts.Reader.TryRead(out _))
+            {
+            }
+
+            while (receivedTaunts.Reader.TryRead(out _))
+            {
+            }
+
             Volatile.Write(ref screen, null);
             Volatile.Write(ref pendingScreen, null);
             Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Move);
@@ -106,13 +135,15 @@ public sealed class RelayClient
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(TimeSpan.FromSeconds(NetRules.SendTimeoutSeconds));
             var action = (PlayerAction)Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Move);
+            var taunt = pendingTaunts.Reader.TryRead(out var clip) ? (TauntId?)clip : null;
             await Wire.Send(socket, frame with { Sequence = ++sequence, Action = action,
-                Watching = Volatile.Read(ref watching)?.Player, Screen = Interlocked.Exchange(ref pendingScreen, null) }, deadline.Token);
+                Watching = Volatile.Read(ref watching)?.Player, Screen = Interlocked.Exchange(ref pendingScreen, null), Taunt = taunt }, deadline.Token);
         }
     }
 
     private async Task ReadLoopAsync(ClientWebSocket socket, CancellationToken token)
     {
+        long? lastTaunt = null;
         while (!token.IsCancellationRequested)
         {
             var state = await Wire.Receive<WorldState>(socket, token);
@@ -125,6 +156,8 @@ public sealed class RelayClient
                 || state.Self == Guid.Empty || state.Tick < 0
                 || state.Players.Select(p => p?.Id).Distinct().Count() != state.Players.Length
                 || state.Shared is not null && !SharedRules.Valid(state.Shared)
+                || !TauntRules.Valid(state.Taunts, state.TauntSerial)
+                || lastTaunt is { } previousTaunt && state.TauntSerial < previousTaunt
                 || state.Players.Any(p => p is null || p.Id == Guid.Empty || p.Frame is null
                     || p.Name is null || p.Name.Length is 0 or > NetRules.MaxNameLength
                     || !Enum.IsDefined(p.Constraint) || !Enum.IsDefined(p.Colour) || !NetRules.Valid(p.Frame)))
@@ -146,6 +179,19 @@ public sealed class RelayClient
                 }
             }
 
+            // A fresh connection starts at the current serial, so joins/reconnects never replay history.
+            if (lastTaunt is { } serial)
+            {
+                foreach (var item in state.Taunts ?? [])
+                {
+                    if (item.Sequence > serial)
+                    {
+                        receivedTaunts.Writer.TryWrite(item);
+                    }
+                }
+            }
+
+            lastTaunt = state.TauntSerial;
             Interlocked.Exchange(ref receivedAt, Environment.TickCount64);
             Volatile.Write(ref world, state);
         }

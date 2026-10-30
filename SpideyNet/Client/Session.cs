@@ -5,7 +5,7 @@ using SpideyNet.Transport;
 
 namespace SpideyNet.Client;
 
-internal sealed class Session
+internal sealed class Session(Action<TauntEvent>? playTaunt = null)
 {
     private const int RetryLimitSeconds = 8;
     private readonly RelayClient relay = new();
@@ -49,6 +49,8 @@ internal sealed class Session
     }
 
     internal void FireWeb() => relay.FireWeb();
+
+    internal bool SendTaunt(TauntId clip) => relay.SendTaunt(clip);
 
     internal Task DisconnectAsync()
     {
@@ -274,7 +276,13 @@ internal sealed class Session
                         Volatile.Write(ref networkStatus, $"Connected · {NetRules.TickRate} updates/sec");
                         retrySeconds = 1;
                     }
-                    await Task.WhenAny(connection, Task.Delay(250, token));
+                    // Audio delivery follows networking, independently of native game frame transactions.
+                    foreach (var taunt in relay.TakeTaunts())
+                    {
+                        playTaunt?.Invoke(taunt);
+                    }
+
+                    await Task.WhenAny(connection, Task.Delay(50, token));
                 }
                 await connection;
             }

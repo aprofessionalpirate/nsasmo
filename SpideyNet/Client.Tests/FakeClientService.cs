@@ -1,11 +1,24 @@
 using SpideyNet.Client.Services;
 using SpideyNet.Game;
+using SpideyNet.Core;
 
 namespace SpideyNet.Client.Tests;
 
 internal sealed class FakeClientService : IClientService
 {
     public SessionView View { get; set; } = new("Disconnected", "", null, []);
+    public bool HearTaunts { get; set; } = true;
+    internal TauntId? PreviewedTaunt { get; private set; }
+    internal List<TauntId> SentTaunts { get; } = [];
+    public void PreviewTaunt(TauntId clip) => PreviewedTaunt = clip;
+    internal int AudioStops { get; private set; }
+    public void StopTaunts() => AudioStops++;
+    public bool SendTaunt(TauntId clip)
+    {
+        SentTaunts.Add(clip);
+        return true;
+    }
+
     internal ClientConnection? Connection { get; private set; }
     internal int Disconnects { get; private set; }
     internal int Shots { get; private set; }

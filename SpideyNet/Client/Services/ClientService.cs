@@ -1,11 +1,63 @@
 using SpideyNet.Core;
+using SpideyNet.Client.Audio;
 using SpideyNet.Game;
 
 namespace SpideyNet.Client.Services;
 
 internal sealed class ClientService : IClientService
 {
-    private readonly Session session = new();
+    private readonly Session session;
+    private readonly TauntPlayer taunts = new(new WaveAudioOutput());
+    private bool hearTaunts = true;
+    private readonly object audioGate = new();
+
+    internal ClientService()
+    {
+        session = new Session(ReceiveTaunt);
+    }
+
+    public bool HearTaunts
+    {
+        get => Volatile.Read(ref hearTaunts);
+        set
+        {
+            lock (audioGate)
+            {
+                Volatile.Write(ref hearTaunts, value);
+                if (!value)
+                {
+                    taunts.Stop();
+                }
+            }
+        }
+    }
+
+    public void PreviewTaunt(TauntId clip) => taunts.Play(clip);
+
+    public void StopTaunts() => taunts.Stop();
+
+    public bool SendTaunt(TauntId clip) => session.SendTaunt(clip);
+
+    private void ReceiveTaunt(TauntEvent taunt)
+    {
+        lock (audioGate)
+        {
+            if (!HearTaunts)
+            {
+                return;
+            }
+
+            try
+            {
+                taunts.Play(taunt.Clip);
+            }
+            catch (Exception error) when (error is IOException or System.ComponentModel.Win32Exception)
+            {
+                // An unavailable audio device must not disconnect the game or memory worker.
+                SessionDiagnostics.Record(error, 0);
+            }
+        }
+    }
 
     public SessionView View => session.View;
 
@@ -50,7 +102,11 @@ internal sealed class ClientService : IClientService
             connection.Rendering, connection.Interactions, connection.Shared, connection.DifferentColours, connection.Colour);
     }
 
-    public Task DisconnectAsync() => session.DisconnectAsync();
+    public async Task DisconnectAsync()
+    {
+        await session.DisconnectAsync();
+        taunts.Stop();
+    }
 
     public Task TeleportAsync(Guid player) => session.TeleportAsync(player);
 

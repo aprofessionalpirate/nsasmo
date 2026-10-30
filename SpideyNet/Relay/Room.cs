@@ -9,6 +9,8 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
     private readonly object gate = new();
     private readonly Dictionary<Guid, Peer> peers = [];
     private long tick;
+    private long roomEntryOrder;
+    private readonly TauntLog taunts = new();
     private readonly SharedRooms shared = new();
     internal Guid Id { get; } = Guid.NewGuid();
     internal InteractionMode Interactions { get; } = interactions;
@@ -60,6 +62,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
             shared.Elect(peers.Values.Where(p => p.State is not null && now - p.LastSeen < NetRules.StaleMs).ToArray());
             var players = peers.Values.Where(p => p.State is not null
                 && now - p.LastSeen < NetRules.StaleMs).Select(p => p.State!).ToArray();
+            var recentTaunts = taunts.Snapshot(now);
             foreach (var peer in peers.Values)
             {
                 // Route fresh game images only to watchers; movement snapshots stay at 30 Hz.
@@ -69,7 +72,7 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                 peer.SentScreen = watched?.Screen;
                 var requested = peers.Values.Any(other => other.Watching == peer.Id && now - other.LastSeen < NetRules.StaleMs);
                 peer.Outbox.Writer.TryWrite(new WorldState(NetRules.Version, peer.Id, tick, players,
-                    SharedMode == SharedMode.Experimental ? shared.Snapshot(peer.State?.Frame.Level, peer.SharedSerial) : null, requested, screen));
+                    SharedMode == SharedMode.Experimental ? shared.Snapshot(peer.State?.Frame.Level, peer.SharedSerial) : null, requested, screen, recentTaunts, taunts.Serial));
             }
         }
     }
@@ -94,7 +97,8 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                 }
                 if (++peer.RateCount > NetRules.MaxRate || update.Version != NetRules.Version
                     || update.Frame is null || !NetRules.Valid(update.Frame) || !Enum.IsDefined(update.Colour)
-                    || update.Sequence <= (peer.State?.Sequence ?? 0))
+                    || update.Sequence <= (peer.State?.Sequence ?? 0)
+                    || update.Taunt is { } clip && !Enum.IsDefined(clip))
                 {
                     throw new InvalidDataException("Invalid or excessive update.");
                 }
@@ -123,6 +127,11 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
 
                 Apply(peer, update, now);
                 peer.LastSeen = now;
+                if (update.Taunt is { } taunt)
+                {
+                    taunts.Add(peer.Id, peer.Name, taunt, now);
+                }
+
                 if (update.Shared is not null)
                 {
                     if (SharedMode != SharedMode.Experimental || !SharedRules.Valid(update.Shared))
@@ -147,6 +156,15 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
         var frame = update.Frame;
         var constraint = ConstraintKind.None;
         var previous = peer.State?.Frame;
+
+        // Arrival in this game room, rather than relay join order, determines enemy authority.
+        // A timed-out player reappearing in place also joins behind the active occupants.
+        if (previous?.Level != frame.Level || now - peer.LastSeen >= NetRules.StaleMs)
+        {
+            peer.RoomEntryOrder = ++roomEntryOrder;
+            peer.SharedEpoch = -1;
+        }
+
         if (update.Action == PlayerAction.Teleport)
         {
             // A deliberate relocation must not be rewound by an earlier freeze or tether.

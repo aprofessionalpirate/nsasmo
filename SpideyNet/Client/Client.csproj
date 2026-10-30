@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Client.Tests" />
+    <EmbeddedResource Include="Assets/Taunts/*.wav" LogicalName="SpideyNet.Taunts.%(Filename)%(Extension)" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />

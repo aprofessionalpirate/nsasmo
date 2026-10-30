@@ -2,7 +2,7 @@ namespace SpideyNet.Core;
 
 public static class NetRules
 {
-    public const int Version = 8;
+    public const int Version = 9;
     public const int MaxPlayers = 8;
     public const int TickRate = 30;
     public const int LocalTickRate = 60;

@@ -75,7 +75,7 @@
       </StackPanel>
 
       <Border Grid.Row="1" Grid.Column="1" Grid.RowSpan="4" Background="#1D2533" CornerRadius="10" Padding="16" MinHeight="180">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="12">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="12">
           <Grid ColumnDefinitions="2*,2*,*,*" ColumnSpacing="8">
             <TextBlock Text="PLAYER" FontWeight="SemiBold" Foreground="#A8B6CA" />
             <TextBlock Grid.Column="1" Text="ROOM" FontWeight="SemiBold" Foreground="#A8B6CA" />
@@ -104,6 +104,23 @@
             <Button Content="Stop spying" Command="{Binding StopSpyingCommand}" Margin="0,0,0,8" />
           </WrapPanel>
           <TextBlock Grid.Row="3" Text="{Binding PreviewStatus}" TextWrapping="Wrap" Foreground="#A8B6CA" />
+          <StackPanel Grid.Row="5" Spacing="8">
+            <TextBlock Text="TAUNTS" FontWeight="SemiBold" Foreground="#A8B6CA" />
+            <ComboBox ItemsSource="{Binding Taunts}" SelectedItem="{Binding SelectedTaunt}"
+                      HorizontalAlignment="Stretch" AutomationProperties.Name="Taunt selector">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TauntChoice">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <WrapPanel>
+              <Button Content="Preview taunt" Command="{Binding PreviewTauntCommand}" Margin="0,0,8,8" />
+              <Button Content="Send taunt" Command="{Binding SendTauntCommand}" Margin="0,0,0,8" />
+            </WrapPanel>
+            <CheckBox Content="Hear multiplayer taunts" IsChecked="{Binding HearTaunts}" />
+            <TextBlock Text="{Binding TauntStatus}" TextWrapping="Wrap" Foreground="#A8B6CA" />
+          </StackPanel>
           <Border Grid.Row="4" IsVisible="{Binding IsSpying}" Background="Black" CornerRadius="4" Padding="4">
             <Image Source="{Binding Preview}" Height="250" Stretch="Uniform"
                    RenderOptions.BitmapInterpolationMode="None" AutomationProperties.Name="Player game preview" />

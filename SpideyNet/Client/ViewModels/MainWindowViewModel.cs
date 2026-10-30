@@ -46,14 +46,14 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(DisconnectCommand), nameof(RefreshGamesCommand),
-        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand))]
+        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
     private bool isAttached;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld))]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(RefreshGamesCommand), nameof(DisconnectCommand),
-        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand))]
+        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
     private bool isBusy;
 
     [ObservableProperty]
@@ -80,6 +80,50 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
 
     [ObservableProperty]
     private string previewStatus = "Select a player and choose Spy to view their game.";
+
+    [ObservableProperty]
+    private TauntChoice selectedTaunt = new(TauntId.SpiderMan, "Spider-Man");
+
+    [ObservableProperty]
+    private bool hearTaunts = true;
+
+    [ObservableProperty]
+    private string tauntStatus = "Preview locally, or send to everyone connected to your relay room.";
+
+    public IReadOnlyList<TauntChoice> Taunts { get; } =
+    [
+        new(TauntId.Spider, "Spider"),
+        new(TauntId.Man, "Man"),
+        new(TauntId.SpiderMan, "Spider-Man"),
+        new(TauntId.SpinWeb, "Spin web"),
+        new(TauntId.OhPeter, "Oh, Peter")
+    ];
+
+    partial void OnHearTauntsChanged(bool value) => service.HearTaunts = value;
+
+    private bool CanSendTaunt() => IsAttached && !IsBusy;
+
+    [RelayCommand]
+    private void PreviewTaunt()
+    {
+        try
+        {
+            service.PreviewTaunt(SelectedTaunt.Id);
+            TauntStatus = $"Preview: {SelectedTaunt.Name}";
+        }
+        catch (Exception error)
+        {
+            ErrorMessage = $"Cannot play taunt: {error.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSendTaunt))]
+    private void SendTaunt()
+    {
+        TauntStatus = service.SendTaunt(SelectedTaunt.Id)
+            ? $"Sent: {SelectedTaunt.Name}"
+            : "Wait for a relay connection and a playable game; the taunt queue may also be full.";
+    }
 
     private PlayerScreen? displayedScreen;
     public bool IsSpying => WatchedPlayer is not null;
@@ -353,5 +397,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         {
             await DisconnectAsync();
         }
+
+        service.StopTaunts();
     }
 }

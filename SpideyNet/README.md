@@ -43,7 +43,7 @@ VGA games. Space-fired web lines are shared with other players in the same scree
 The player list shows native room names and health out of 100 (the game uses
 192 for full health). Health is read without changing game memory. Older clients
 that do not report health appear as **Unknown**; update each client to share it.
-The existing protocol 8 relay remains compatible.
+Use protocol 9 clients and relay for the current feature set.
 
 Select a player, then choose
 **Teleport to player** to load their room and move to the position reported
@@ -64,7 +64,27 @@ client as well to fix dark previews from older builds.
 Previews use 320 x 200 pixels, RGB565 and compression, at up to four images/sec.
 Capture starts only while watched. A shared capture serves multiple watchers;
 the relay routes each image only to its subscribers. Position updates remain
-at 30/sec. All clients and the relay must use protocol 8 for these features.
+at 30/sec. All clients and the relay must use protocol 9 for the current feature set.
+
+## Voice taunts
+
+Choose one of five extracted voice clips under **Taunts**, then choose **Preview
+taunt** to hear it locally or **Send taunt** to send it to everyone connected to
+your private relay room, including players on other game screens. The sender
+also hears the relay-confirmed taunt. **Hear multiplayer taunts** mutes received
+clips locally; Preview remains available while disconnected or muted.
+
+There is no cooldown. A new clip replaces the current clip rather than queuing
+delayed audio. A bounded network queue uses the existing update cadence.
+Repeated movement snapshots do not replay taunts, and joins/reconnects skip old
+history. Audio-device failures do not disconnect the game.
+
+The five voice instruments come from the supplied `spidey3.mod` and are embedded
+in the single-file client; only catalogue IDs cross the network. See the
+[audio provenance and extraction notes](Client/Assets/Taunts/README.md).
+
+**Update both clients and relay to protocol 9** for taunts. Older protocol 8
+builds cannot connect to this relay.
 
 ## Choose your suit colour
 
@@ -76,7 +96,7 @@ The choice follows each player's identity across rooms; duplicate colours are al
 
 Uncheck that option to display original suits locally. Other players can still
 see your chosen colour. Observe mode never recolours game memory. Disconnect
-before changing your selection. Upgrade the relay and all clients to protocol 8.
+before changing your selection. Upgrade the relay and all clients to protocol 9.
 
 Rendering transactions wait until the native game has finished copying and drawing
 all four VGA planes. Suspending DOSBox mid-copy is insufficient: an animated suit
@@ -88,7 +108,7 @@ still returning through. No palette or sprite assets are changed.
 Player positions also preserve the native game's wrapped top-edge coordinates:
 Y=250 represents six pixels above the room. Recolouring, remote visibility,
 interpolation and web interactions continue while a player is partially visible.
-Protocol 8 requires updated clients and an updated relay to accept these positions.
+These wrapped positions require updated clients and relay; the current protocol is 9.
 
 ## Host the relay with Docker
 
@@ -99,7 +119,7 @@ docker compose -f SpideyNet/compose.yaml up -d --build
 Invoke-RestMethod http://127.0.0.1:5080/health
 ```
 
-The health response reports protocol 8. Use `ws://127.0.0.1:5080` in the client.
+The health response reports protocol 9. Use `ws://127.0.0.1:5080` in the client.
 Only the relay runs in Docker; DOSBox and the desktop client remain on Windows.
 The server needs no host .NET installation. The client still needs its runtime.
 
@@ -164,7 +184,7 @@ address literals. Use it only on a trusted LAN: room keys and traffic are unencr
 LAN hostnames and public addresses require `wss://`.
 
 Open `http://192.168.178.45:5000/health` from a player computer to verify reachability;
-it should return `{"protocol":8}`. If it times out, check the relay's listening
+it should return `{"protocol":9}`. If it times out, check the relay's listening
 address, Windows Firewall inbound TCP port 5000 on the Private profile, and network
 isolation between devices. With no endpoint configuration, the relay listens only
 on `http://localhost:5000`, which another computer cannot reach.
@@ -270,6 +290,11 @@ a three-game follower launch/stop and owner handoff were tested.
 Use a new room key when starting a new game. Shared progress lives in the relay;
 resetting only DOSBox would reapply the previous session's state. Disconnect
 removes rendering patches but keeps acquired progress in the local game.
+
+Enemy ownership follows arrival order in each native game room: the first active
+player to enter owns the enemies until they leave, disconnect or time out. The
+next earliest occupant then takes over. Returning to the room counts as a new
+arrival. Lift/helicopter driver ownership still follows rider contact separately.
 
 ## Memory constraints
 

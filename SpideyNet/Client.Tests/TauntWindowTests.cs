@@ -21,20 +21,25 @@ public sealed class TauntWindowTests
         Dispatcher.UIThread.RunJobs();
         var selector = window.GetVisualDescendants().OfType<ComboBox>()
             .Single(combo => AutomationProperties.GetName(combo) == "Taunt selector");
-        Assert.Equal(5, selector.ItemCount);
+        Assert.Equal(20, selector.ItemCount);
+        Assert.Contains(model.Taunts, item => item.Id == TauntId.SpinWeb && item.Name == "Spin a web");
+        Assert.Contains(model.Taunts, item => item.Id == TauntId.ImMatt && item.Name == "I'm Matt");
+        Assert.Contains(model.Taunts, item => item.Id == TauntId.ImTim && item.Name == "I'm Tim");
+        Assert.Contains(model.Taunts, item => item.Id == TauntId.ImJoe && item.Name == "I'm Joe");
+        Assert.Contains(model.Taunts, item => item.Id == TauntId.MattTimJoe && item.Name == "Matt Tim Joe");
         Assert.Equal(TauntId.SpiderMan, model.SelectedTaunt.Id);
         Assert.False(model.SendTauntCommand.CanExecute(null));
 
-        selector.SelectedItem = model.Taunts.Single(item => item.Id == TauntId.OhPeter);
+        selector.SelectedItem = model.Taunts.Single(item => item.Id == TauntId.ImMatt);
         Dispatcher.UIThread.RunJobs();
         model.PreviewTauntCommand.Execute(null);
-        Assert.Equal(TauntId.OhPeter, service.PreviewedTaunt);
+        Assert.Equal(TauntId.ImMatt, service.PreviewedTaunt);
         await model.RefreshGamesCommand.ExecuteAsync(null);
         model.ConnectCommand.Execute(null);
         Assert.True(model.SendTauntCommand.CanExecute(null));
         model.SendTauntCommand.Execute(null);
         model.SendTauntCommand.Execute(null);
-        Assert.Equal(new[] { TauntId.OhPeter, TauntId.OhPeter }, service.SentTaunts);
+        Assert.Equal(new[] { TauntId.ImMatt, TauntId.ImMatt }, service.SentTaunts);
 
         var mute = window.GetVisualDescendants().OfType<CheckBox>()
             .Single(check => Equals(check.Content, "Hear multiplayer taunts"));

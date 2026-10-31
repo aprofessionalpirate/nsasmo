@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
+    <ApplicationIcon>Assets/SpideyNet.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Bundle managed and native dependencies; use the installed .NET runtime. -->
@@ -13,6 +14,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Client.Tests" />
+    <AvaloniaResource Include="Assets/SpideyNet.ico" />
     <EmbeddedResource Include="Assets/Taunts/*.wav" LogicalName="SpideyNet.Taunts.%(Filename)%(Extension)" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />

@@ -18,7 +18,7 @@ internal static class IntegrationChecks
         var isolated = new RelayClient();
         var source = new GameFrame(2, 40, 100, 0, StandingPose, Health: 96);
         first.Publish(source, colour: SuitColour.Cyan, sprite: 0x20);
-        second.Publish(source with { X = 80 }, colour: SuitColour.Purple, sprite: 0x4A);
+        second.Publish(source with { X = 80 }, colour: SuitColour.Purple, sprite: 0x46);
         isolated.Publish(source);
         var tasks = new[]
         {
@@ -35,7 +35,7 @@ internal static class IntegrationChecks
                 && first.World!.Players.Single(player => player.Id == second.World!.Self).Colour == SuitColour.Purple,
                 "Suit choices belong to player identities on both clients");
             Check(() => second.World!.Players.Single(player => player.Id == first.World!.Self).Sprite == 0x20
-                && first.World!.Players.Single(player => player.Id == second.World!.Self).Sprite == 0x4A,
+                && first.World!.Players.Single(player => player.Id == second.World!.Self).Sprite == 0x46,
                 "Enemy appearance is paired with each identity");
             first.Publish(source with { Level = 3 }, colour: SuitColour.Green, sprite: 0x32);
             await UntilAsync(() => second.World?.Players.Any(player => player.Id == first.World!.Self

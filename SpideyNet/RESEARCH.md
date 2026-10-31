@@ -266,3 +266,24 @@ Replica placement now rebuilds dimensions and bounds from native pose/facing
 tables, preserving local animation pointers and prior draw history. Healthy
 hidden startup poses retain their previous dimensions because pose 0x5F has
 no usable collision shape. No protocol or relay change is needed.
+
+# Grouped character appearances - release 1.0
+
+Native DS animation scripts distinguish movement from idle/turn/stun artwork:
+Mummy A2E9 walks 20,21,22,23 (idle 24, turn 25); Skeleton A35C walks 27,28,29,26
+(turn 2A); Robot A4C7 alternates 33,32 (turn 34); Green monster A578 walks
+36,37,38,35 (turn 39); Rat A60C alternates 3B,3A (turn 3C); Cowboy A6AA walks
+42,43,44,45 (idle 40, shooting/turn 41); Mysterio A733 walks 47,48,49,46 (turn 4A).
+Bat flap states A441/A462 provide 2F,30 and 31,2E. Shark fin uses 2B/2C with
+2D for the separate turn/splash state.
+
+Room 63 has two distinct native actors: one starts script A71A (Mysterio), the
+other A678 (Mary Jane's 3E/3F rescue loop). No other room instantiates A678.
+The earlier Werewolf label for 3E/3F was incorrect; all of 46..4A belong to
+Mysterio. Character IDs remain the first frame of each group. Protocol 13 limits
+selections to these groups, while SourceFrame maps player animation phase to a
+native appearance without changing real actor bytes or using an enemy sideways bank.
+
+Native VGA capture checks compared all ten choices across four walk phases,
+idle and turn to DOS draw_actor output. All 80 choice/facing combinations also
+preserved every byte of the real player record and restored native storage/counts.

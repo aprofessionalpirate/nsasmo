@@ -23,7 +23,10 @@ public sealed class PlayerSpriteWindowTests
         await model.RefreshGamesCommand.ExecuteAsync(null);
         var selector = window.GetVisualDescendants().OfType<ComboBox>()
             .Single(combo => AutomationProperties.GetName(combo) == "Your sprite");
-        Assert.Equal(44, selector.ItemCount);
+        Assert.Equal(11, selector.ItemCount);
+        Assert.Contains(model.Sprites, sprite => sprite.Name == "Mary Jane" && sprite.Frame == 0x3E);
+        Assert.Contains(model.Sprites, sprite => sprite.Name == "Mysterio" && sprite.Frame == 0x46);
+        Assert.DoesNotContain(model.Sprites, sprite => sprite.Name.Contains("pose") || sprite.Name.Contains("Grim Reaper"));
         Assert.Equal(PlayerSpriteRules.SpiderMan, model.SelectedSprite.Frame);
         selector.SelectedItem = model.Sprites.Single(sprite => sprite.Frame == 0x32);
         Dispatcher.UIThread.RunJobs();

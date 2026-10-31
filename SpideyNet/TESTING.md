@@ -513,3 +513,38 @@ Video Code-to-Planet Fall exit. Remaining displacement pauses during loading and
 continues after the destination is ready. The native worker applies positions,
 bounds and previous-position history directly without checking scenery.
 The full domain/relay suite and all 19 Avalonia view-model tests passed.
+
+## Release 1.0 character groups and media
+
+Protocol 13: all domain/socket checks and all 19 Avalonia tests pass with eleven
+character choices (Spider-Man plus ten grouped characters). Mysterio and Mary
+Jane have distinct IDs and labels. Native DOSBox output matched 60 walk/idle/turn
+captures; 80 character/facing combinations preserved the complete player record.
+Both supported and unsupported executable SHA-256 hashes were checked again.
+
+The generated client icon is embedded in the Windows executable and Avalonia
+window. Release builds use product version 1.0.0 and assembly/file version 1.0.0.0.
+
+The Take 1 release GIF contains 15 actual DOSBox frames with eight distinct relay
+identities/colours and a synchronized pose sequence. The native frame, colour
+roster and seven-guest count were checked during recording. A contact sheet was
+visually reviewed; the full native HUD and level art are retained.
+
+Classic web icon selected and the 1.0 client republished. Three additional native
+Take 1 GIFs were recorded with eight relay participants: side-step (10s), staggered
+web shots (10s), and ripple (8s). GIF dimensions, total durations and all 50 web
+stages were verified; every intended web column appears and clears correctly.
+
+## Graphixmania voice taunts
+
+The selector now offers 20 taunts, including 15 contiguous SID sample excerpts.
+The original SpinWeb ID/resource remains stable with display label Spin a web.
+The three I'm-name clips and exact Matt Tim Joe cut were independently checked
+with local speech recognition; repeated-word cuts were cross-checked against
+sample waveform matches. All assets use mono 22050 Hz / 16-bit PCM with short
+edge fades. Protocol 14 prevents mismatched catalogue IDs on older relays.
+
+Release build completed with zero warnings/errors. All 19 Avalonia UI/audio
+tests passed, covering selector labels and all 20 embedded PCM resources. Relay
+taunt checks passed for the complete catalogue, immediate repeated sends, room
+isolation, reconnects and invalid IDs. Client.exe and Relay.exe were republished.

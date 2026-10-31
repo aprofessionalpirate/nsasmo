@@ -101,8 +101,23 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         new(TauntId.Spider, "Spider"),
         new(TauntId.Man, "Man"),
         new(TauntId.SpiderMan, "Spider-Man"),
-        new(TauntId.SpinWeb, "Spin web"),
-        new(TauntId.OhPeter, "Oh, Peter")
+        new(TauntId.SpinWeb, "Spin a web"),
+        new(TauntId.OhPeter, "Oh, Peter"),
+        new(TauntId.ImMatt, "I'm Matt"),
+        new(TauntId.ImTim, "I'm Tim"),
+        new(TauntId.ImJoe, "I'm Joe"),
+        new(TauntId.Matt, "Matt"),
+        new(TauntId.Tim, "Tim"),
+        new(TauntId.Joe, "Joe"),
+        new(TauntId.MattTim, "Matt Tim"),
+        new(TauntId.TimJoe, "Tim Joe"),
+        new(TauntId.JoeTim, "Joe Tim"),
+        new(TauntId.TimMatt, "Tim Matt"),
+        new(TauntId.MattTimJoe, "Matt Tim Joe"),
+        new(TauntId.JoeTimTimMatt, "Joe Tim Tim Matt"),
+        new(TauntId.MattMatt, "Matt Matt"),
+        new(TauntId.TimTim, "Tim Tim"),
+        new(TauntId.JoeJoe, "Joe Joe")
     ];
 
     partial void OnHearTauntsChanged(bool value) => service.HearTaunts = value;

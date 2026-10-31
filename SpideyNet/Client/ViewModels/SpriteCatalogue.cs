@@ -4,31 +4,26 @@ namespace SpideyNet.Client.ViewModels;
 
 internal static class SpriteCatalogue
 {
-    internal static IReadOnlyList<SpriteChoice> Choices { get; } = new[]
-        {
-            new SpriteChoice(PlayerSpriteRules.SpiderMan, "Spider-Man")
-        }
-        .Concat(Enumerable.Range(PlayerSpriteRules.FirstEnemy, PlayerSpriteRules.LastEnemy - PlayerSpriteRules.FirstEnemy + 1)
-            .Select(CreateEnemy)).ToArray();
+    internal static IReadOnlyList<SpriteChoice> Choices { get; } = PlayerSpriteRules.Choices.Select(Create).ToArray();
 
-    private static SpriteChoice CreateEnemy(int frame)
+    private static SpriteChoice Create(byte sprite)
     {
-        // Descriptive visual guesses, not official enemy names. Keep the native frame ID visible.
-        var (name, first) = frame switch
+        // Mary Jane's two-frame rescue script is separate from Mysterio's walk/turn scripts.
+        var name = sprite switch
         {
-            >= 0x20 and <= 0x25 => ("Mummy", 0x20),
-            >= 0x26 and <= 0x2A => ("Skeleton", 0x26),
-            >= 0x2B and <= 0x2D => ("Shark fin", 0x2B),
-            >= 0x2E and <= 0x31 => ("Bat", 0x2E),
-            >= 0x32 and <= 0x34 => ("Robot", 0x32),
-            >= 0x35 and <= 0x39 => ("Green monster", 0x35),
-            >= 0x3A and <= 0x3D => ("Rat", 0x3A),
-            >= 0x3E and <= 0x3F => ("Werewolf", 0x3E),
-            >= 0x40 and <= 0x45 => ("Cowboy", 0x40),
-            >= 0x46 and <= 0x4A => ("Grim Reaper", 0x46),
-            _ => throw new ArgumentOutOfRangeException(nameof(frame))
+            PlayerSpriteRules.SpiderMan => "Spider-Man",
+            0x20 => "Mummy",
+            0x26 => "Skeleton",
+            0x2B => "Shark fin",
+            0x2E => "Bat",
+            0x32 => "Robot",
+            0x35 => "Green monster",
+            0x3A => "Rat",
+            0x3E => "Mary Jane",
+            0x40 => "Cowboy",
+            0x46 => "Mysterio",
+            _ => throw new ArgumentOutOfRangeException(nameof(sprite))
         };
-
-        return new SpriteChoice((byte)frame, $"{name} · pose {frame - first + 1} (0x{frame:X2})");
+        return new SpriteChoice(sprite, name);
     }
 }

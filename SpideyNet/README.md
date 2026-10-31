@@ -43,7 +43,7 @@ VGA games. Space-fired web lines are shared with other players in the same scree
 The player list shows native room names and health out of 100 (the game uses
 192 for full health). Health is read without changing game memory. Older clients
 that do not report health appear as **Unknown**; update each client to share it.
-Use protocol 12 clients and relay for the current feature set.
+Use protocol 14 clients and relay for the current feature set.
 
 Select a player, then choose
 **Teleport to player** to load their room and move to the position reported
@@ -64,11 +64,11 @@ client as well to fix dark previews from older builds.
 Previews use 320 x 200 pixels, RGB565 and compression, at up to four images/sec.
 Capture starts only while watched. A shared capture serves multiple watchers;
 the relay routes each image only to its subscribers. Position updates remain
-at 30/sec. All clients and the relay must use protocol 12 for the current feature set.
+at 30/sec. All clients and the relay must use protocol 14 for the current feature set.
 
 ## Voice taunts
 
-Choose one of five extracted voice clips under **Taunts**, then choose **Preview
+Choose one of twenty extracted voice clips under **Taunts**, then choose **Preview
 taunt** to hear it locally or **Send taunt** to send it to everyone connected to
 your private relay room, including players on other game screens. The sender
 also hears the relay-confirmed taunt. **Hear multiplayer taunts** mutes received
@@ -79,43 +79,47 @@ delayed audio. A bounded network queue uses the existing update cadence.
 Repeated movement snapshots do not replay taunts, and joins/reconnects skip old
 history. Audio-device failures do not disconnect the game.
 
-The five voice instruments come from the supplied `spidey3.mod` and are embedded
+The clips come from the supplied `spidey3.mod` and `Graphixmania_2_part_6.sid` and are embedded
 in the single-file client; only catalogue IDs cross the network. See the
 [audio provenance and extraction notes](Client/Assets/Taunts/README.md).
+The SID additions include **I'm Matt**, **I'm Tim**, **I'm Joe**, **Matt Tim Joe**,
+individual names, pairs and repeated-name combinations. **Spin a web** is the
+updated display label for the original MOD clip.
 
-**Update both clients and relay to protocol 12** for the current feature set.
+**Update both clients and relay to protocol 14** for the current feature set.
 Older protocol versions cannot connect to this relay.
 
 ## Choose your character sprite
 
-Before connecting, choose **Your sprite**: Spider-Man (the default animated
-character), or any of 43 visible enemy frames (`0x20`–`0x4A`). Blank padding frames
-are excluded. Descriptive names group the frames as Mummy, Skeleton, Shark fin,
-Bat, Robot, Green monster, Rat, Werewolf, Cowboy and Grim Reaper. These are visual
-guesses rather than official names. Pose numbers and native frame IDs distinguish
-animation variants and projectile artwork. Disconnect before changing your selection.
+Before connecting, choose **Your sprite**: Spider-Man, Mummy, Skeleton,
+Shark fin, Bat, Robot, Green monster, Rat, Mary Jane, Cowboy or Mysterio.
+Each character combines its native walk, idle and turn poses rather than exposing
+individual static frames. The visible walk cycle follows your normal player
+animation; standing and turning select the character's corresponding native pose.
+Mary Jane uses the separate two-frame rescue animation from Mysterio's End.
+Disconnect before changing your selection.
 
-Your chosen frame appears on your own screen and other clients, even when chosen
-Spidey colours are hidden. Enemy artwork retains its original colours; the Spidey
-colour selector applies only to Spider-Man. Enemy poses remain fixed while moving,
-with mirroring/rotation for player facing. Spider-Man keeps normal native animation.
+Your chosen character appears on your own screen and other clients, even when
+chosen Spidey colours are hidden. Enemy artwork retains its original colours;
+the Spidey colour selector applies only to Spider-Man. Mirroring and rotation
+follow your player's facing, including wall and ceiling movement.
 
 This changes appearance only: movement, webs, health and collision behavior remain
 those of Spider-Man. The bridge never writes an enemy pose into the real player
 record, and it never uses an unverified sideways enemy-sprite bank. Observe mode
-shows your original local game. Update every client and the relay to protocol 12.
+shows your original local game. Update every client and the relay to protocol 14.
 
-## Choose your suit colour
+## Choose your Spidey colour
 
-Before connecting, choose **Your suit colour**: Red (the original suit), Cyan,
-Green, Purple, Orange, Blue, White or Grey. With **Show chosen suit colours
+Before connecting, choose **Your Spidey colour**: Red (the original suit), Cyan,
+Green, Purple, Orange, Blue, White or Grey. With **Show chosen Spidey colours
 (including yours)** enabled, your own Spider-Man and remote players use their
 chosen colours. Blue clothing, eyes, outlines and shading retain their detail.
 The choice follows each player's identity across rooms; duplicate colours are allowed.
 
 Uncheck that option to display original suits locally. Other players can still
 see your chosen colour. Observe mode never recolours game memory. Disconnect
-before changing your selection. Upgrade the relay and all clients to protocol 12.
+before changing your selection. Upgrade the relay and all clients to protocol 14.
 
 Rendering transactions wait until the native game has finished copying and drawing
 all four VGA planes. Suspending DOSBox mid-copy is insufficient: an animated suit
@@ -138,7 +142,7 @@ docker compose -f SpideyNet/compose.yaml up -d --build
 Invoke-RestMethod http://127.0.0.1:5080/health
 ```
 
-The health response reports protocol 12. Use `ws://127.0.0.1:5080` in the client.
+The health response reports protocol 14. Use `ws://127.0.0.1:5080` in the client.
 Only the relay runs in Docker; DOSBox and the desktop client remain on Windows.
 The server needs no host .NET installation. The client still needs its runtime.
 
@@ -203,7 +207,7 @@ address literals. Use it only on a trusted LAN: room keys and traffic are unencr
 LAN hostnames and public addresses require `wss://`.
 
 Open `http://192.168.178.45:5000/health` from a player computer to verify reachability;
-it should return `{"protocol":12}`. If it times out, check the relay's listening
+it should return `{"protocol":14}`. If it times out, check the relay's listening
 address, Windows Firewall inbound TCP port 5000 on the Private profile, and network
 isolation between devices. With no endpoint configuration, the relay listens only
 on `http://localhost:5000`, which another computer cannot reach.
@@ -263,7 +267,7 @@ over 400 ms, including vertically or diagonally. The push ignores scenery and
 player collisions, and follows connected-room exits, carrying the remaining distance through loading. The cooldown is 600 ms.
 DOSBox must have keyboard focus for V; release the key before pressing again.
 This is separate from the original game's Space key. Update the relay and all
-clients together: protocol 12 replaces the old freeze command with pushing.
+clients together: protocol 14 includes animated character choices and the directional push command.
 
 Ordinary **Space** shots publish their native endpoints and draw the line on peers
 using each game's graphics buffer. This works with player interactions disabled.
@@ -329,7 +333,7 @@ arrival. Lift/helicopter driver ownership still follows rider contact separately
 
 ## Leo's Maze and Roaring Flames fixes
 
-Protocol 12 clients wait for the native room loader to finish before reading or
+Protocol 14 clients wait for the native room loader to finish before reading or
 patching its enemy tables. Repeated room names such as Leo's Maze no longer let
 intermediate tables pass the readiness check. A valid native count change causes
 safe reacquisition rather than stopping the connection.
@@ -339,7 +343,7 @@ The bridge preserves their health and animation instead of recording permanent
 death. Roaring Flames's self-resetting buttons now forward their input to the
 room owner even when the switch resets within a single native frame.
 
-Update **all clients and the relay to protocol 12**. If an older build has already
+Update **all clients and the relay to protocol 14**. If an older build has already
 recorded false deaths in a session, restart the DOS games and use a **new room
 key**: the relay and native games may both retain the old dead-enemy state.
 These changes do not implement general healing or scripted resurrection of

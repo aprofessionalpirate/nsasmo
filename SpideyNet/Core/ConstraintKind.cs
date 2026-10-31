@@ -4,6 +4,6 @@ public enum ConstraintKind
 {
     None,
     Position,
-    Frozen,
+    Pushed,
     WebPull
 }

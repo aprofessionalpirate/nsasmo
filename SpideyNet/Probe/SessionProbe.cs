@@ -60,15 +60,15 @@ internal static class SessionProbe
         {
             // Observe real desktop commands without injecting another actor into either game.
             await UntilAsync(() => observer.World?.Players.Length >= 2, stop.Token);
-            Console.WriteLine("Web observer ready: click Fire web or press V in the shooter's DOSBox.");
-            while (observer.World?.Players.Any(player => player.Constraint == ConstraintKind.Frozen) != true)
+            Console.WriteLine("Web observer ready: click Push player or press V in the shooter's DOSBox.");
+            while (observer.World?.Players.Any(player => player.Constraint == ConstraintKind.Pushed) != true)
             {
                 await Task.Delay(10, stop.Token);
             }
 
-            Console.WriteLine("Web observer: a desktop command froze a remote player.");
-            await UntilAsync(() => observer.World?.Players.All(player => player.Constraint != ConstraintKind.Frozen) == true, stop.Token);
-            Console.WriteLine("Web observer: freeze expired.");
+            Console.WriteLine("Web observer: a desktop command pushed a remote player.");
+            await UntilAsync(() => observer.World?.Players.All(player => player.Constraint != ConstraintKind.Pushed) == true, stop.Token);
+            Console.WriteLine("Web observer: push expired.");
         }
         finally
         {
@@ -165,10 +165,10 @@ internal static class SessionProbe
             Connect(first, second, firstId, secondId, endpoint, InjectionMode.Experimental);
             await UntilAsync(() => first.View.Players.Length == 1 && second.View.Players.Length == 1, stop.Token);
             await UntilAsync(() => firstGame.Inspect().RenderHex != firstBefore.RenderHex, stop.Token);
-            first.FireWeb();
-            await UntilAsync(() => first.View.Players[0].Constraint == ConstraintKind.Frozen, stop.Token);
+            first.PushPlayer();
+            await UntilAsync(() => first.View.Players[0].Constraint == ConstraintKind.Pushed, stop.Token);
             Position(secondGame, 67);
-            await UntilAsync(() => secondGame.Read() is { } frozen && Math.Abs(frozen.X - 51) <= 2, stop.Token);
+            await UntilAsync(() => secondGame.Read() is { } pushed && pushed.X > 75, stop.Token);
             await UntilAsync(() => first.View.Players[0].Constraint == ConstraintKind.None, stop.Token);
             Position(secondGame, 67);
             await UntilAsync(() => Math.Abs(first.View.Players[0].Frame.X - 67) <= 2, stop.Token);
@@ -179,7 +179,7 @@ internal static class SessionProbe
                 throw new InvalidOperationException("Player crossing produced a position correction.");
             }
 
-            Console.WriteLine("Session interactions: freeze and expiry work; players pass through each other.");
+            Console.WriteLine("Session interactions: push and expiry work; players pass through each other.");
 
             // A double click or closing during disconnect can request shutdown twice.
             await Task.WhenAll(first.DisconnectAsync(), first.DisconnectAsync(), second.DisconnectAsync());

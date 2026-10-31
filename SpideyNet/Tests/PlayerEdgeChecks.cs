@@ -28,7 +28,7 @@ internal static class PlayerEdgeChecks
 
         var source = frame with { X = 0, Facing = 0, WebHeld = true, Web = new WebState(47, 7, 7, 1) };
         var target = frame with { X = 40, Y = 0 };
-        Check(InteractionRules.WebHits(source, target), "Freeze range crosses the top edge");
+        Check(InteractionRules.CanPush(source, target), "Push range crosses the top edge");
         Check(WebRules.Hits(source, target), "Web segment hits a partially visible player");
         var pulled = WebRules.Pull(source, target, 0.1);
         Check(pulled.ScreenY is >= -6 and <= 0 && pulled.Web?.OriginY == pulled.ScreenY + 7, "Pull geometry uses screen coordinates");

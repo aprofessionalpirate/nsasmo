@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace SpideyNet.Core;
 
-public sealed record GameFrame(byte Level, short X, byte Y, byte Facing, byte Pose, WebState? Web = null, bool WebHeld = false, byte? Health = null)
+public sealed record GameFrame(byte Level, short X, byte Y, byte Facing, byte Pose, WebState? Web = null, bool WebHeld = false, byte? Health = null, RoomLinks? Exits = null)
 {
     // Full native health is 192; missing values identify peers that do not publish health yet.
     [JsonIgnore]

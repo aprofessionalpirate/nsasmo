@@ -117,5 +117,5 @@ internal sealed class ClientService : IClientService
 
     public void Watch(Guid? player) => session.Watch(player);
 
-    public void FireWeb() => session.FireWeb();
+    public void PushPlayer() => session.PushPlayer();
 }

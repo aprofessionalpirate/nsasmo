@@ -56,5 +56,5 @@ internal sealed class FakeClientService : IClientService
 
     public void Watch(Guid? player) => WatchedPlayer = player;
 
-    public void FireWeb() => Shots++;
+    public void PushPlayer() => Shots++;
 }

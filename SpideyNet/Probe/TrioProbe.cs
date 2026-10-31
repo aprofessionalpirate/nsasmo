@@ -233,7 +233,7 @@ internal static class TrioProbe
         Console.WriteLine("Live keyboard preview ready for 75 seconds: V and Space in the first game.");
         var end = Environment.TickCount64 + 75000;
         var web = false;
-        var frozen = false;
+        var pushed = false;
         while (Environment.TickCount64 < end)
         {
             CheckActive(sessions);
@@ -243,16 +243,16 @@ internal static class TrioProbe
                 Console.WriteLine("Live input: native Space web reached a remote production session.");
             }
 
-            if (!frozen && sessions.Any(session => session.View.Players.Any(player => player.Constraint == ConstraintKind.Frozen)))
+            if (!pushed && sessions.Any(session => session.View.Players.Any(player => player.Constraint == ConstraintKind.Pushed)))
             {
-                frozen = true;
+                pushed = true;
                 Console.WriteLine("Live input: V froze a remote player.");
             }
 
             await Task.Delay(10, token);
         }
 
-        Console.WriteLine($"Live keyboard result: native web={web}, freeze={frozen}.");
+        Console.WriteLine($"Live keyboard result: native web={web}, push={pushed}.");
     }
 
     private static async Task InteractionsAsync(List<GameBridge> games, Session[] sessions, CancellationToken token)
@@ -262,21 +262,21 @@ internal static class TrioProbe
         Position(games[2], 91);
         await UntilAsync(() => sessions[0].View.Players.Any(player => player.Name == "Trio 2" && Math.Abs(player.Frame.X - 51) < 3)
             && sessions[0].View.Players.Any(player => player.Name == "Trio 3" && Math.Abs(player.Frame.X - 91) < 3), sessions, token);
-        sessions[0].FireWeb();
-        await UntilAsync(() => sessions[0].View.Players.Any(player => player.Name == "Trio 2" && player.Constraint == ConstraintKind.Frozen), sessions, token);
+        sessions[0].PushPlayer();
+        await UntilAsync(() => sessions[0].View.Players.Any(player => player.Name == "Trio 2" && player.Constraint == ConstraintKind.Pushed), sessions, token);
         if (sessions[0].View.Players.Single(player => player.Name == "Trio 3").Constraint != ConstraintKind.None)
         {
-            throw new IOException("The player beyond web range was frozen.");
+            throw new IOException("The farther player was pushed instead of the nearest one.");
         }
 
         Position(games[1], 65);
-        await UntilAsync(() => games[1].Read() is { } frame && Math.Abs(frame.X - 51) < 3, sessions, token);
+        await UntilAsync(() => games[1].Read() is { } frame && frame.X > 75, sessions, token);
         await UntilAsync(() => sessions[0].View.Players.All(player => player.Constraint == ConstraintKind.None), sessions, token);
         Position(games[1], 100);
         await UntilAsync(() => sessions[0].View.Players.Any(player => player.Name == "Trio 2" && Math.Abs(player.Frame.X - 100) < 3), sessions, token);
         Position(games[2], 67);
         await UntilAsync(() => sessions[0].View.Players.Any(player => player.Name == "Trio 3" && Math.Abs(player.Frame.X - 67) < 3), sessions, token);
-        Console.WriteLine("Interactions: nearest target frozen, distant peer unaffected, expiry and player crossing passed.");
+        Console.WriteLine("Interactions: nearest target pushed, distant peer unaffected, expiry and player crossing passed.");
     }
 
     private static async Task TransitionsAsync(List<GameBridge> games, Session[] sessions, CancellationToken token)

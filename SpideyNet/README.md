@@ -43,7 +43,7 @@ VGA games. Space-fired web lines are shared with other players in the same scree
 The player list shows native room names and health out of 100 (the game uses
 192 for full health). Health is read without changing game memory. Older clients
 that do not report health appear as **Unknown**; update each client to share it.
-Use protocol 11 clients and relay for the current feature set.
+Use protocol 12 clients and relay for the current feature set.
 
 Select a player, then choose
 **Teleport to player** to load their room and move to the position reported
@@ -64,7 +64,7 @@ client as well to fix dark previews from older builds.
 Previews use 320 x 200 pixels, RGB565 and compression, at up to four images/sec.
 Capture starts only while watched. A shared capture serves multiple watchers;
 the relay routes each image only to its subscribers. Position updates remain
-at 30/sec. All clients and the relay must use protocol 11 for the current feature set.
+at 30/sec. All clients and the relay must use protocol 12 for the current feature set.
 
 ## Voice taunts
 
@@ -83,7 +83,7 @@ The five voice instruments come from the supplied `spidey3.mod` and are embedded
 in the single-file client; only catalogue IDs cross the network. See the
 [audio provenance and extraction notes](Client/Assets/Taunts/README.md).
 
-**Update both clients and relay to protocol 11** for the current feature set.
+**Update both clients and relay to protocol 12** for the current feature set.
 Older protocol versions cannot connect to this relay.
 
 ## Choose your character sprite
@@ -103,7 +103,7 @@ with mirroring/rotation for player facing. Spider-Man keeps normal native animat
 This changes appearance only: movement, webs, health and collision behavior remain
 those of Spider-Man. The bridge never writes an enemy pose into the real player
 record, and it never uses an unverified sideways enemy-sprite bank. Observe mode
-shows your original local game. Update every client and the relay to protocol 11.
+shows your original local game. Update every client and the relay to protocol 12.
 
 ## Choose your suit colour
 
@@ -115,7 +115,7 @@ The choice follows each player's identity across rooms; duplicate colours are al
 
 Uncheck that option to display original suits locally. Other players can still
 see your chosen colour. Observe mode never recolours game memory. Disconnect
-before changing your selection. Upgrade the relay and all clients to protocol 11.
+before changing your selection. Upgrade the relay and all clients to protocol 12.
 
 Rendering transactions wait until the native game has finished copying and drawing
 all four VGA planes. Suspending DOSBox mid-copy is insufficient: an animated suit
@@ -138,7 +138,7 @@ docker compose -f SpideyNet/compose.yaml up -d --build
 Invoke-RestMethod http://127.0.0.1:5080/health
 ```
 
-The health response reports protocol 11. Use `ws://127.0.0.1:5080` in the client.
+The health response reports protocol 12. Use `ws://127.0.0.1:5080` in the client.
 Only the relay runs in Docker; DOSBox and the desktop client remain on Windows.
 The server needs no host .NET installation. The client still needs its runtime.
 
@@ -203,7 +203,7 @@ address literals. Use it only on a trusted LAN: room keys and traffic are unencr
 LAN hostnames and public addresses require `wss://`.
 
 Open `http://192.168.178.45:5000/health` from a player computer to verify reachability;
-it should return `{"protocol":11}`. If it times out, check the relay's listening
+it should return `{"protocol":12}`. If it times out, check the relay's listening
 address, Windows Firewall inbound TCP port 5000 on the Private profile, and network
 isolation between devices. With no endpoint configuration, the relay listens only
 on `http://localhost:5000`, which another computer cannot reach.
@@ -257,10 +257,13 @@ reachability; packet loss can delay later packets. It is not UDP/QUIC transport.
 Player interactions default to `Experimental`. Every client in the room must
 use the same setting; choose `Disabled` to opt out. Observe mode disables them.
 Players pass through each other without collision corrections.
-Press **V** in DOSBox or click **Fire web** to freeze the nearest player ahead within 64 coordinate units
-for 1.2 seconds. The cooldown is 600 ms. Rooms and facing direction are checked
-by the relay. This is a separate multiplayer command; it does not hook the
-original game's Space key.
+Press **V** in DOSBox or click **Push player** to push the nearest player in the
+same room within 128 game pixels. They move 128 pixels away from your position
+over 400 ms, including vertically or diagonally. The push ignores scenery and
+player collisions, and follows connected-room exits, carrying the remaining distance through loading. The cooldown is 600 ms.
+DOSBox must have keyboard focus for V; release the key before pressing again.
+This is separate from the original game's Space key. Update the relay and all
+clients together: protocol 12 replaces the old freeze command with pushing.
 
 Ordinary **Space** shots publish their native endpoints and draw the line on peers
 using each game's graphics buffer. This works with player interactions disabled.
@@ -326,7 +329,7 @@ arrival. Lift/helicopter driver ownership still follows rider contact separately
 
 ## Leo's Maze and Roaring Flames fixes
 
-Protocol 11 clients wait for the native room loader to finish before reading or
+Protocol 12 clients wait for the native room loader to finish before reading or
 patching its enemy tables. Repeated room names such as Leo's Maze no longer let
 intermediate tables pass the readiness check. A valid native count change causes
 safe reacquisition rather than stopping the connection.
@@ -336,7 +339,7 @@ The bridge preserves their health and animation instead of recording permanent
 death. Roaring Flames's self-resetting buttons now forward their input to the
 room owner even when the switch resets within a single native frame.
 
-Update **all clients and the relay to protocol 11**. If an older build has already
+Update **all clients and the relay to protocol 12**. If an older build has already
 recorded false deaths in a session, restart the DOS games and use a **new room
 key**: the relay and native games may both retain the old dead-enemy state.
 These changes do not implement general healing or scripted resurrection of
@@ -427,7 +430,7 @@ dotnet run --project Probe --no-build -- --pause-race
 # Stabilize already defeated actors and check native wrapping after detach:
 dotnet run --project Probe --no-build -- --inactive <process-id>
 # With two desktop clients using Experimental interactions and shared scenes:
-# Click Fire web, or manually press V in DOSBox, within sixty seconds.
+# Click Push player, or manually press V in DOSBox, within sixty seconds.
 dotnet run --project Probe --no-build -- --watch-web ws://localhost:5080 <room-key>
 ```
 
@@ -441,7 +444,7 @@ the failed operation. Logs omit room keys and network traffic.
 
 Tests cover record validation, signed coordinates, actor construction,
 interpolation, expiry, player crossing and web range. Relay checks use real sockets
-for identities, room isolation, freeze expiry, web attachment/release, fragmentation and
+for identities, room isolation, push displacement/expiry, web attachment/release, fragmentation and
 room capacity. Probe hashes reserved bytes before and after restoration.
 Malformed, oversized, binary and invalid-room messages are rejected in socket tests.
 Shared-state checks cover switch dirty bits, acknowledgements, pending damage,

@@ -2,23 +2,15 @@ namespace SpideyNet.Core;
 
 public static class InteractionRules
 {
-    public const int FreezeMs = 1200;
+    public const int PushMs = 400;
     public const int CooldownMs = 600;
-    private const int WebRange = 64;
-    private const int WebHeight = 12;
+    private const int PushRange = 128;
 
-    public static bool WebHits(GameFrame source, GameFrame target)
+    public static bool CanPush(GameFrame source, GameFrame target)
     {
-        if (source.Level != target.Level || Math.Abs(source.ScreenY - target.ScreenY) > WebHeight)
-        {
-            return false;
-        }
-        var delta = target.X - source.X;
-        return source.Facing switch
-        {
-            0 => delta is > 0 and <= WebRange,
-            2 => delta is < 0 and >= -WebRange,
-            _ => false
-        };
+        // Pushes work in every direction, including across the native wrapped top edge.
+        var dx = target.X - source.X;
+        var dy = target.ScreenY - source.ScreenY;
+        return source.Level == target.Level && dx * dx + dy * dy <= PushRange * PushRange;
     }
 }

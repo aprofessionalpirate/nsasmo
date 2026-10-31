@@ -5,7 +5,7 @@
         x:Class="SpideyNet.Client.MainWindow"
         x:ClassModifier="internal"
         x:DataType="vm:MainWindowViewModel"
-        Title="SpideyNet · DOS multiplayer"
+        Title="SpideyNet"
         Width="1220" Height="820" MinWidth="1000" MinHeight="540"
         WindowStartupLocation="CenterScreen"
         Background="#131822">
@@ -13,7 +13,6 @@
     <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="1.15*,*" RowSpacing="14" ColumnSpacing="20">
       <StackPanel Grid.ColumnSpan="2" Spacing="4">
         <TextBlock Text="SPIDEYNET" FontSize="30" FontWeight="Bold" />
-        <TextBlock Text="VGA · DOS multiplayer" Foreground="#A8B6CA" />
       </StackPanel>
 
       <Border Grid.Row="1" Background="#1D2533" CornerRadius="10" Padding="20">
@@ -64,7 +63,7 @@
         </Grid>
       </Border>
 
-      <TextBlock Grid.Row="2" Text="Experimental rendering writes game memory. Space fires the native web; V freezes a nearby player."
+      <TextBlock Grid.Row="2" Text="Experimental rendering writes game memory."
                  TextWrapping="Wrap" Foreground="#E8BD79" FontSize="13" />
 
       <WrapPanel Grid.Row="3" Orientation="Horizontal">
@@ -72,7 +71,7 @@
         <Button Content="Disconnect" Command="{Binding DisconnectCommand}" Margin="0,0,8,8" />
         <Button Content="Refresh DOSBox" Command="{Binding RefreshGamesCommand}" Margin="0,0,8,8" />
         <Button Content="Copy room key" Command="{Binding CopyRoomKeyCommand}" Margin="0,0,8,8" />
-        <Button Content="Fire web · V" Command="{Binding FireWebCommand}" Margin="0,0,0,8" />
+        <Button Content="Push player · V" Command="{Binding PushPlayerCommand}" Margin="0,0,0,8" />
       </WrapPanel>
 
       <StackPanel Grid.Row="4" Spacing="6">

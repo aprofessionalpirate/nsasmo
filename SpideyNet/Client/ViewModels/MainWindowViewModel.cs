@@ -30,7 +30,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     private InjectionMode rendering = InjectionMode.Experimental;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(FireWebCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PushPlayerCommand))]
     private InteractionMode interactions = InteractionMode.Experimental;
 
     [ObservableProperty]
@@ -52,14 +52,14 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
     [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld), nameof(CanChooseColour))]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(DisconnectCommand), nameof(RefreshGamesCommand),
-        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
+        nameof(PushPlayerCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
     private bool isAttached;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit))]
     [NotifyPropertyChangedFor(nameof(CanConfigureWorld), nameof(CanChooseColour))]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(RefreshGamesCommand), nameof(DisconnectCommand),
-        nameof(FireWebCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
+        nameof(PushPlayerCommand), nameof(TeleportCommand), nameof(SpyCommand), nameof(StopSpyingCommand), nameof(SendTauntCommand))]
     private bool isBusy;
 
     [ObservableProperty]
@@ -203,7 +203,7 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
 
     private bool CanConnect() => CanEdit && SelectedGame is not null;
     private bool CanDisconnect() => IsAttached && !IsBusy;
-    private bool CanFireWeb() => IsAttached && !IsBusy && Interactions == InteractionMode.Experimental;
+    private bool CanPushPlayer() => IsAttached && !IsBusy && Interactions == InteractionMode.Experimental;
 
     partial void OnRenderingChanged(InjectionMode value)
     {
@@ -287,8 +287,8 @@ internal sealed partial class MainWindowViewModel(IClientService service, IClipb
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanFireWeb))]
-    private void FireWeb() => service.FireWeb();
+    [RelayCommand(CanExecute = nameof(CanPushPlayer))]
+    private void PushPlayer() => service.PushPlayer();
 
     [RelayCommand]
     private async Task CopyRoomKeyAsync()

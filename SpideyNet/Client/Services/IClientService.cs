@@ -13,7 +13,7 @@ internal interface IClientService
     Task<GameProcess[]> FindGamesAsync(CancellationToken token);
     void Connect(ClientConnection connection);
     Task DisconnectAsync();
-    void FireWeb();
+    void PushPlayer();
     Task TeleportAsync(Guid player);
     void Watch(Guid? player);
 }

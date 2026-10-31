@@ -58,7 +58,7 @@ public sealed class RelayClient
 
     public void Publish(GameFrame? frame, SharedReport? shared = null, SuitColour colour = SuitColour.Red, byte sprite = PlayerSpriteRules.SpiderMan) => Volatile.Write(ref latest,
         frame is null ? null : new ClientUpdate(NetRules.Version, 0, frame, Shared: shared, Colour: colour, Sprite: sprite));
-    public void FireWeb() => Interlocked.CompareExchange(ref pendingAction, (int)PlayerAction.FireWeb, (int)PlayerAction.Move);
+    public void PushPlayer() => Interlocked.CompareExchange(ref pendingAction, (int)PlayerAction.PushPlayer, (int)PlayerAction.Move);
     public void Teleported() => Interlocked.Exchange(ref pendingAction, (int)PlayerAction.Teleport);
 
     public async Task Run(Uri endpoint, string room, string name, InteractionMode interactions, CancellationToken token,

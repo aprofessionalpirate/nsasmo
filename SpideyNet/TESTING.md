@@ -498,3 +498,18 @@ dotnet run --project Probe -- --screen-scale
 dotnet run --project Probe -- --render-regression ws://localhost:5080 <test-pid>
 dotnet run --project Probe -- --placement <test-pid>
 ```
+
+## Directional pushes and cross-room loading - 31 October 2026
+
+Protocol 12 replaces the V/button freeze command with Push player. Domain and
+socket regressions cover 128-pixel radial selection, nearest-target selection,
+128-pixel displacement in cardinal/diagonal directions, endpoint acknowledgement,
+room-link validation, native top-edge coordinates, cooldown and teleport cancellation.
+The relay keeps old-room scene reports out of the destination while a push loads it.
+
+A production Session in a disposable VGA DOSBox game passed movement through
+Midnight scenery, horizontal Midnight-to-Foyer continuation, and the vertical
+Video Code-to-Planet Fall exit. Remaining displacement pauses during loading and
+continues after the destination is ready. The native worker applies positions,
+bounds and previous-position history directly without checking scenery.
+The full domain/relay suite and all 19 Avalonia view-model tests passed.

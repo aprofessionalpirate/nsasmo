@@ -5,17 +5,17 @@ namespace SpideyNet.Game;
 
 internal sealed class GameInput(int processId)
 {
-    private const int WebKey = 0x56;
+    private const int PushKey = 0x56;
     private const short DownMask = unchecked((short)0x8000);
     private bool wasDown;
 
     internal PlayerAction Poll()
     {
         GetWindowThreadProcessId(GetForegroundWindow(), out var foreground);
-        var down = foreground == processId && (GetAsyncKeyState(WebKey) & DownMask) != 0;
-        var fire = down && !wasDown;
+        var down = foreground == processId && (GetAsyncKeyState(PushKey) & DownMask) != 0;
+        var push = down && !wasDown;
         wasDown = down;
-        return fire ? PlayerAction.FireWeb : PlayerAction.Move;
+        return push ? PlayerAction.PushPlayer : PlayerAction.Move;
     }
 
     [DllImport("user32.dll")]

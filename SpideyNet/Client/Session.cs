@@ -48,7 +48,7 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
         running = RunAsync(processId, endpoint, room, name, mode, interactions, shared, differentColours, colour, sprite, lifetime.Token);
     }
 
-    internal void FireWeb() => relay.FireWeb();
+    internal void PushPlayer() => relay.PushPlayer();
 
     internal bool SendTaunt(TauntId clip) => relay.SendTaunt(clip);
 
@@ -118,9 +118,9 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
                 while (await timer.WaitForNextTickAsync(linked.Token))
                 {
                     var local = game.Read();
-                    if (interactions == InteractionMode.Experimental && game.ReadAction() == PlayerAction.FireWeb)
+                    if (interactions == InteractionMode.Experimental && game.ReadAction() == PlayerAction.PushPlayer)
                     {
-                        relay.FireWeb();
+                        relay.PushPlayer();
                     }
                     var state = relay.World;
                     if (Volatile.Read(ref teleport) is { } request)
@@ -185,6 +185,11 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
                         capture = game.CaptureScreenAsync();
                     }
 
+                    if (interactions == InteractionMode.Experimental && mode == InjectionMode.Experimental
+                        && Volatile.Read(ref teleport) is null && Environment.TickCount64 - travelledAt > 500)
+                    {
+                        game.Constrain(state?.Players.FirstOrDefault(p => p.Id == state.Self));
+                    }
                     GameSceneUpdate? sceneUpdate = null;
                     if (shared == SharedMode.Experimental)
                     {
@@ -201,11 +206,6 @@ internal sealed class Session(Action<TauntEvent>? playTaunt = null)
                         }
                     }
                     else { relay.Publish(local, colour: colour, sprite: sprite); }
-                    if (interactions == InteractionMode.Experimental && mode == InjectionMode.Experimental
-                        && Volatile.Read(ref teleport) is null && Environment.TickCount64 - travelledAt > 500)
-                    {
-                        game.Constrain(state?.Players.FirstOrDefault(p => p.Id == state.Self));
-                    }
                     var players = state?.Players.Where(p => p.Id != state.Self).OrderBy(p => p.Id).ToArray() ?? [];
 
                     // A reconnect can repeat a tick number with entirely new player identities.

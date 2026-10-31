@@ -71,9 +71,10 @@ try
     Check(() => track.Sample(4000)?.X == 68, "Reappearing players do not reuse expired interpolation samples");
     track.Add(guest with { Level = 3, X = 100 }, 4100);
     Check(() => track.Sample(4100)?.X == 100, "Snap across rooms");
-    Check(() => InteractionRules.WebHits(guest with { Facing = 0, X = 0 }, guest with { X = 40 }), "Web reaches player ahead");
-    Check(() => !InteractionRules.WebHits(guest with { Facing = 2, X = 0 }, guest with { X = 40 }), "Web respects facing");
-    Check(() => !InteractionRules.WebHits(guest, guest with { Level = 3 }), "Web cannot cross rooms");
+    Check(() => InteractionRules.CanPush(guest with { Facing = 0, X = 0 }, guest with { X = 40 }), "Push reaches a nearby player");
+    Check(() => InteractionRules.CanPush(guest with { Facing = 2, X = 0 }, guest with { X = 40 }), "Push direction depends on separation, not facing");
+    Check(() => !InteractionRules.CanPush(guest, guest with { Level = 3 }), "Push cannot cross rooms");
+    PushChecks.Run();
     SharedChecks.Run();
     PuzzlePulseChecks.Run();
     MoverAuthorityChecks.Run();

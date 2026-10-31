@@ -2,7 +2,7 @@ namespace SpideyNet.Core;
 
 public static class NetRules
 {
-    public const int Version = 11;
+    public const int Version = 12;
     public const int MaxPlayers = 8;
     public const int TickRate = 30;
     public const int LocalTickRate = 60;
@@ -25,6 +25,8 @@ public static class NetRules
         return frame.Level is > 0 and <= GameLayout.MaxLevel
             && frame.X is >= -32 and <= GameLayout.Width + 32
             && frame.ScreenY is >= -32 and <= GameLayout.Height + 32 && (frame.Facing & ~GameLayout.FacingMask) == 0
+            && (frame.Exits is null || frame.Exits.Up <= GameLayout.MaxLevel && frame.Exits.Right <= GameLayout.MaxLevel
+                && frame.Exits.Down <= GameLayout.MaxLevel && frame.Exits.Left <= GameLayout.MaxLevel)
             && frame.Pose < GameLayout.PlayerCharacterLimit && WebRules.Valid(frame.Web);
     }
 }

@@ -138,6 +138,12 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
                     {
                         throw new InvalidDataException("Invalid shared game state.");
                     }
+                    // Never seed the destination with enemy/mover records from the room being left.
+                    if (update.Frame.Level != peer.State!.Frame.Level)
+                    {
+                        continue;
+                    }
+
                     // Keep contact geometry paired with the same position update. A cached
                     // platform can be a tile behind the rider's native simulation.
                     peer.Movers = new MoverObservation(peer.State!.Frame.Level, update.Shared.Epoch,
@@ -157,31 +163,33 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
         var constraint = ConstraintKind.None;
         var previous = peer.State?.Frame;
 
-        // Arrival in this game room, rather than relay join order, determines enemy authority.
-        // A timed-out player reappearing in place also joins behind the active occupants.
-        if (previous?.Level != frame.Level || now - peer.LastSeen >= NetRules.StaleMs)
-        {
-            peer.RoomEntryOrder = ++roomEntryOrder;
-            peer.SharedEpoch = -1;
-        }
-
         if (update.Action == PlayerAction.Teleport)
         {
-            // A deliberate relocation must not be rewound by an earlier freeze or tether.
-            peer.FrozenUntil = 0;
+            // A deliberate relocation must not be rewound by an earlier push or tether.
+            peer.Push = null;
             peer.WebTarget = null;
         }
 
         if (Interactions == InteractionMode.Experimental && previous is not null && update.Action != PlayerAction.Teleport)
         {
-            if (previous.Level != frame.Level) { peer.FrozenUntil = 0; }
-            if (peer.FrozenUntil > now)
+            if (peer.Push is { } pending && !pending.Accepts(frame.Level))
             {
-                frame = frame with { X = previous.X, Y = previous.Y };
-                constraint = ConstraintKind.Frozen;
+                peer.Push = null;
+            }
+            if (peer.Push is { } push)
+            {
+                // Ignore native movement/collision corrections while the push is in progress.
+                var finished = push.Finished(frame, now);
+                var position = push.Sample(frame, now);
+                frame = frame with { Level = position.Level, X = position.X, Y = position.Y, Exits = position.Exits, Web = null, WebHeld = false };
+                constraint = ConstraintKind.Pushed;
+                if (finished)
+                {
+                    peer.Push = null;
+                }
             }
         }
-        if (Interactions == InteractionMode.Experimental && constraint != ConstraintKind.Frozen && update.Action != PlayerAction.Teleport)
+        if (Interactions == InteractionMode.Experimental && constraint != ConstraintKind.Pushed && update.Action != PlayerAction.Teleport)
         {
             frame = ApplyWeb(peer, frame, now);
             if (peer.WebTarget is not null)
@@ -190,17 +198,28 @@ internal sealed class Room(InteractionMode interactions, SharedMode sharedMode)
             }
         }
 
+        // Arrival in this game room, rather than relay join order, determines enemy authority.
+        // A timed-out player reappearing in place also joins behind the active occupants.
+        if (previous?.Level != frame.Level || now - peer.LastSeen >= NetRules.StaleMs)
+        {
+            peer.RoomEntryOrder = ++roomEntryOrder;
+            peer.SharedEpoch = -1;
+        }
+
         peer.State = new PlayerState(peer.Id, peer.Name, frame, update.Sequence, constraint, update.Colour, update.Sprite);
-        if (Interactions != InteractionMode.Experimental || update.Action != PlayerAction.FireWeb
-            || constraint == ConstraintKind.Frozen || peer.WebReadyAt > now) { return; }
+        if (Interactions != InteractionMode.Experimental || update.Action != PlayerAction.PushPlayer
+            || constraint == ConstraintKind.Pushed || peer.WebReadyAt > now) { return; }
 
         peer.WebReadyAt = now + InteractionRules.CooldownMs;
         var target = peers.Values.Where(p => p.Id != peer.Id && p.State is not null
-            && now - p.LastSeen < NetRules.StaleMs && InteractionRules.WebHits(frame, p.State.Frame))
-            .OrderBy(p => Math.Abs(p.State!.Frame.X - frame.X)).FirstOrDefault();
+            && now - p.LastSeen < NetRules.StaleMs && InteractionRules.CanPush(frame, p.State.Frame))
+            .OrderBy(p => Math.Pow(p.State!.Frame.X - frame.X, 2)
+                + Math.Pow(p.State.Frame.ScreenY - frame.ScreenY, 2)).ThenBy(p => p.Id).FirstOrDefault();
         if (target?.State is null) { return; }
-        target.FrozenUntil = now + InteractionRules.FreezeMs;
-        target.State = target.State with { Constraint = ConstraintKind.Frozen };
+        // A new impulse replaces the old one and releases any web tether on its target.
+        target.Push = new PushMotion(frame, target.State.Frame, now);
+        target.WebTarget = null;
+        target.State = target.State with { Constraint = ConstraintKind.Pushed };
     }
 
     private GameFrame ApplyWeb(Peer peer, GameFrame frame, long now)

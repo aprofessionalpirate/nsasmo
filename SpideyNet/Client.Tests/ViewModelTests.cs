@@ -43,13 +43,13 @@ public sealed class ViewModelTests
         Assert.Equal(11, service.Connection?.ProcessId);
         Assert.False(model.CanEdit);
         Assert.False(model.RefreshGamesCommand.CanExecute(null));
-        model.FireWebCommand.Execute(null);
+        model.PushPlayerCommand.Execute(null);
         Assert.Equal(1, service.Shots);
         await model.CopyRoomKeyCommand.ExecuteAsync(null);
         Assert.Equal(model.RoomKey, clipboard.Text);
         await model.DisconnectCommand.ExecuteAsync(null);
         Assert.True(model.CanEdit);
-        Assert.False(model.FireWebCommand.CanExecute(null));
+        Assert.False(model.PushPlayerCommand.CanExecute(null));
         Assert.Equal(1, service.Disconnects);
         Assert.DoesNotContain("Enemy owner", model.Location);
     }

@@ -54,12 +54,12 @@ internal static class IntegrationChecks
             Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.Pose == StandingPose,
                 "Player animations remain independent");
             first.Publish(source);
-            first.FireWeb();
+            first.PushPlayer();
             await UntilAsync(() => second.World?.Players.Any(p => p.Id == second.World.Self
-                && p.Constraint == ConstraintKind.Frozen) == true, stop.Token);
+                && p.Constraint == ConstraintKind.Pushed) == true, stop.Token);
             second.Publish(source with { X = 140 });
             await Task.Delay(150, stop.Token);
-            Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.X == 80, "Freeze holds authoritative position");
+            Check(() => second.World!.Players.Single(p => p.Id == second.World.Self).Frame.X > 80 && second.World!.Players.Single(p => p.Id == second.World.Self).Frame.X <= 208, "Push advances away from the source despite conflicting native position updates");
             await UntilAsync(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 140, stop.Token);
             second.Publish(source with { X = 80 });
             await UntilAsync(() => second.World?.Players.Single(p => p.Id == second.World.Self).Frame.X == 80, stop.Token);
@@ -67,6 +67,7 @@ internal static class IntegrationChecks
             await UntilAsync(() => first.World?.Players.Single(p => p.Id == first.World.Self).Frame.X == 100, stop.Token);
             Check(() => first.World!.Players.Single(p => p.Id == first.World.Self).Constraint == ConstraintKind.None,
                 "Players pass through each other without position corrections");
+            await PushAcrossRoomsCheckAsync(first, second, source, stop.Token);
             await NativeWebCheckAsync(first, second, source, stop.Token);
             await TeleportCheckAsync(first, second, source, stop.Token);
             await FragmentCheckAsync(endpoint, stop.Token);
@@ -89,7 +90,7 @@ internal static class IntegrationChecks
                 source, Sprite: GameLayout.HiddenCharacter));
             await RejectCheckAsync(endpoint, invalidSprite, WebSocketMessageType.Text, stop.Token);
             await CadenceCheckAsync(endpoint, stop.Token);
-            Console.WriteLine("Relay checks: identities, room isolation, freeze/expiry, free crossing, native web/pull/release, fragmentation, capacity and invalid-message rejection.");
+            Console.WriteLine("Relay checks: identities, room isolation, push/expiry, free crossing, native web/pull/release, fragmentation, capacity and invalid-message rejection.");
         }
         finally
         {
@@ -99,20 +100,49 @@ internal static class IntegrationChecks
         }
     }
 
+    private static async Task PushAcrossRoomsCheckAsync(RelayClient first, RelayClient second, GameFrame source, CancellationToken token)
+    {
+        // The target is 120 pixels away and behind the shooter's facing: both were rejected by freezing.
+        first.Publish(source with { X = 100, Facing = 2 });
+        second.Publish(source with { X = 220, Exits = new RoomLinks(0, 3, 0, 0) });
+        await UntilAsync(() => first.World?.Players.Any(player => player.Id == second.World!.Self && player.Frame.X == 220) == true, token);
+        first.PushPlayer();
+        await UntilAsync(() => second.World?.Players.Any(player => player.Id == second.World.Self
+            && player.Constraint == ConstraintKind.Pushed && player.Frame.Level == 3) == true, token);
+
+        // Echo placement like the real memory worker; stale room-2 updates must not cancel the impulse.
+        var until = Environment.TickCount64 + 2000;
+        while (Environment.TickCount64 < until)
+        {
+            var self = second.World!.Players.Single(player => player.Id == second.World.Self);
+            second.Publish(self.Frame);
+            if (self.Constraint == ConstraintKind.None && self.Frame.Level == 3 && self.Frame.X == 113)
+            {
+                Console.WriteLine("Push socket: larger radial range, reverse facing and full displacement across a connected room passed.");
+                first.Publish(source);
+                second.Publish(source with { X = 80 });
+                await UntilAsync(() => first.World?.Players.Any(player => player.Id == second.World!.Self && player.Frame.Level == source.Level) == true, token);
+                return;
+            }
+            await Task.Delay(15, token);
+        }
+        throw new InvalidOperationException("A room-crossing push did not finish at its full 128-pixel endpoint.");
+    }
+
     private static async Task TeleportCheckAsync(RelayClient first, RelayClient second, GameFrame frame, CancellationToken token)
     {
         first.Publish(frame);
         second.Publish(frame with { X = 80 });
         await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self).Frame.X == 80, token);
-        first.FireWeb();
-        await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self).Constraint == ConstraintKind.Frozen, token);
+        first.PushPlayer();
+        await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self).Constraint == ConstraintKind.Pushed, token);
         second.Publish(frame with { X = 180 });
         second.Teleported();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(500);
         await UntilAsync(() => second.World?.Players.Single(player => player.Id == second.World.Self)
             is { Constraint: ConstraintKind.None, Frame.X: 180 }, deadline.Token);
-        Console.WriteLine("Teleport socket: relocation clears an existing freeze without waiting for expiry.");
+        Console.WriteLine("Teleport socket: relocation clears an existing push without waiting for expiry.");
     }
 
     private static async Task NativeWebCheckAsync(RelayClient first, RelayClient second, GameFrame source, CancellationToken token)

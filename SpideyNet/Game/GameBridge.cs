@@ -57,7 +57,9 @@ public sealed class GameBridge : IDisposable
 
     public Task<ScreenFrame?> CaptureScreenAsync() => Task.Run(() => GameScreenCapture.Capture(processId));
 
-    public bool TryTeleport(GameFrame destination)
+    public bool TryTeleport(GameFrame destination) => TryTravel(destination, false);
+
+    private bool TryTravel(GameFrame destination, bool pushing)
     {
         if (!NetRules.Valid(destination) || destination.X is < 0 or > 235 || destination.Y > 155)
         {
@@ -67,7 +69,7 @@ public sealed class GameBridge : IDisposable
         using var pause = frameBoundary?.Pause() ?? memory.Pause();
         travel ??= new RoomTravel(memory, playerAddress - GameProfile.PlayerDataOffset);
         var local = Read();
-        if (travelStartedAt == 0 && local is not null && (local.WebHeld || local.Web is not null))
+        if (!pushing && travelStartedAt == 0 && local is not null && (local.WebHeld || local.Web is not null))
         {
             throw new InvalidOperationException("Release Space and let the current web shot finish before teleporting.");
         }
@@ -150,7 +152,10 @@ public sealed class GameBridge : IDisposable
         }
 
         webMemory ??= new WebMemory(memory, playerAddress - GameProfile.PlayerDataOffset, CurrentRoomAddress());
-        var sampled = frame with { Web = webMemory.Read(data), WebHeld = (data[1] & 0x10) != 0 };
+        // Export domain exits for cross-room impulses; raw room-header offsets stay in this driver.
+        var exits = memory.Read(roomHeaderAddress + 1, 4);
+        var sampled = frame with { Web = webMemory.Read(data), WebHeld = (data[1] & 0x10) != 0,
+            Exits = new RoomLinks(exits[0], exits[1], exits[2], exits[3]) };
         // Suspension can catch the DOS routine between field writes; retry incomplete native state.
         return NetRules.Valid(sampled) ? sampled : null;
     }
@@ -223,11 +228,18 @@ public sealed class GameBridge : IDisposable
             return;
         }
 
+        // Pushes place directly through scenery and use native loading when an exit is crossed.
+        if (authority.Constraint == ConstraintKind.Pushed)
+        {
+            TryTravel(authority.Frame, true);
+            return;
+        }
+
         using var pause = frameBoundary?.Pause() ?? memory.Pause();
         var local = Read();
         if (local is null || local.Level != authority.Frame.Level || !NetRules.Valid(authority.Frame)) { return; }
 
-        // Apply relay-authorized freezing or pulling without making players solid.
+        // Apply other relay-authorized position corrections without making players solid.
         var position = new byte[3];
         BinaryPrimitives.WriteInt16LittleEndian(position, authority.Frame.X);
         position[2] = authority.Frame.Y;

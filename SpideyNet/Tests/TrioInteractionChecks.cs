@@ -21,15 +21,18 @@ internal static class TrioInteractionChecks
         try
         {
             await UntilAsync(() => peers.All(peer => peer.World?.Players.Length == 3), stop.Token);
-            peers[0].FireWeb();
+            peers[0].PushPlayer();
             await UntilAsync(() => peers[0].World?.Players.Any(player => player.Name == "Trio socket 1"
-                && player.Constraint == ConstraintKind.Frozen) == true, stop.Token);
+                && player.Constraint == ConstraintKind.Pushed) == true, stop.Token);
             if (peers[0].World!.Players.Single(player => player.Name == "Trio socket 2").Constraint != ConstraintKind.None)
             {
-                throw new InvalidOperationException("A distant third player was frozen.");
+                throw new InvalidOperationException("The nearest player alone should be pushed, even when a third player is in range.");
             }
 
             await UntilAsync(() => peers[0].World?.Players.All(player => player.Constraint == ConstraintKind.None) == true, stop.Token);
+
+            peers[1].Publish(frame with { X = 100 });
+            await UntilAsync(() => peers[0].World?.Players.Single(player => player.Name == "Trio socket 1").Frame.X == 100, stop.Token);
 
             // A line intersecting two bodies must attach to the nearer one, then retain it.
             var web = new WebState(200, 107, 47, 107);
@@ -50,7 +53,7 @@ internal static class TrioInteractionChecks
             peers[0].Publish(frame with { X = 60 });
             await UntilAsync(() => peers[2].World?.Players.Any(player => player.Name == "Trio socket 0"
                 && player.Constraint == ConstraintKind.None && player.Frame.Web is null) == true, stop.Token);
-            Console.WriteLine("Three-player sockets: nearest freeze, stable web target, room-change retarget and release passed.");
+            Console.WriteLine("Three-player sockets: nearest push, stable web target, room-change retarget and release passed.");
         }
         finally
         {
